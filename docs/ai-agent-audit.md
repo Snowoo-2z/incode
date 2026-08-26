@@ -117,6 +117,64 @@ nécessaire dans l'interpréteur.
 
 Le résumé de projet (`sprite-reader.js`) rend aussi ces blocs en français.
 
+## Format compact ScratchScript (DSL) — ajouté
+
+Le prompt demandait à l'IA de répondre en **JSON indenté**, ce qui est verbeux
+(un jeu de Pong complet ≈ 2 400 tokens) et fragile : une seule accolade
+manquante fait échouer tout le `JSON.parse`. Pour les gros projets c'était à la
+fois coûteux et peu fiable.
+
+Un mini-langage indenté, proche de Scratch, a été ajouté. Il est **~5 à 15×
+plus léger** que le JSON et beaucoup plus robuste (une faute casse une ligne,
+pas tout le programme). Exemple :
+
+```scratch
+var score = 0
+sprite Balle 0 0:
+  whenflagclicked
+  gotoxy 0 0
+  point 45
+  forever:
+    move 10
+    bounce
+    if (touching _edge_):
+      change score 1
+```
+
+Points clés de l'implémentation :
+
+- **`src/lib/ai-agent/dsl-parser.js`** : le parseur. Il ne fait que du
+  *front-end* — il produit exactement les mêmes objets d'action / de spec de
+  blocs que le chemin JSON, puis réutilise tout le pipeline `block-builder`
+  existant (déjà éprouvé). Tout ce que le DSL exprime, le JSON pouvait déjà
+  l'exprimer.
+- **Indentation = imbrication** : les blocs C (boucles, `if`) se terminent par
+  `:` et leur corps est indenté (2 espaces). `if (...): / else:` devient
+  `control_if_else`.
+- **Arguments positionnels** dans l'ordre du schéma (`getParamOrder`), avec
+  possibilité de nommer un argument (`gotoxy X=0 Y=0`). Les rapporteurs et
+  conditions s'écrivent entre parenthèses : `(random 1 10)`, `(touching _edge_)`.
+- **Noms courts** : table d'alias curée (`move`, `say`, `set`, `+`, `>`…) plus
+  résolution automatique par suffixe d'opcode. En cas de collision de suffixe
+  (`looks_`/`sound_` pour `changeeffectby`/`seteffectto`), la catégorie
+  `looks_` garde le nom court et `sound_` reste accessible via un alias explicite
+  (`changesoundeffect`, `setsoundeffect`).
+- **Détection automatique du format** dans `code-interpreter.js` : on tente
+  d'abord le JSON, puis le DSL, puis l'ancien DSL ligne-à-ligne majuscule.
+  Un **garde de confiance** empêche le DSL d'avaler les commandes CLI héritées
+  (`CREATE_SPRITE Foo`) ou de la prose : si aucun bloc reconnu n'en ressort, il
+  laisse la main au parseur suivant.
+- Le **prompt** (`prompt-generator.js`) enseigne désormais ScratchScript comme
+  format préféré, avec la référence des commandes **générée depuis le parseur**
+  (donc jamais désynchronisée), et garde le JSON en alternative.
+- **Rétrocompatibilité totale** : le JSON continue de fonctionner à
+  l'identique ; les templates internes (Pong, Clicker) restent en JSON.
+- **Tests** : `test/unit/util/ai-agent-dsl-parser.test.js` (18 tests) couvre la
+  résolution d'opcodes, les collisions, les rapporteurs imbriqués, `if/else`,
+  le découpage en scripts, le retrait des barrières de code, le garde de
+  confiance et le pipeline complet DSL → blocs hydratés sans référence
+  pendante.
+
 ## Limites connues (non bloquantes)
 
 - **Blocs personnalisés (My Blocks / `procedures_*`)** : non supportés. Ils

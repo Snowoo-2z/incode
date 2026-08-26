@@ -4,14 +4,34 @@
  */
 
 import {formatProjectSummary} from './sprite-reader.js';
-import {BLOCK_SCHEMA} from './block-schema.js';
+import {BLOCK_SCHEMA, getDefaultInputs, getDefaultFields} from './block-schema.js';
+import {ALIASES, getParamOrder} from './dsl-parser.js';
 
 /**
- * The exhaustive list of opcodes the builder is able to create correctly.
- * Generated from the schema so the prompt can never drift from the code.
- * @returns {string} formatted list
+ * Builds the DSL command reference straight from the parser's alias table and
+ * the block schema, so the documented short names + argument order can never
+ * drift from what the parser actually accepts.
+ * @returns {string} formatted reference
  */
-const listSupportedOpcodes = () => Object.keys(BLOCK_SCHEMA).sort().join(', ');
+const listDslCommands = () => {
+    // opcode -> preferred short name (first alias that maps to it).
+    const preferred = {};
+    for (const [name, opcode] of Object.entries(ALIASES)) {
+        if (!preferred[opcode]) preferred[opcode] = name;
+    }
+    const branchInputs = new Set(['SUBSTACK', 'SUBSTACK2']);
+    const lines = [];
+    for (const opcode of Object.keys(BLOCK_SCHEMA)) {
+        const name = preferred[opcode] || opcode;
+        const order = getParamOrder(opcode).filter(p => !branchInputs.has(p));
+        const hasBranch = Object.keys(getDefaultInputs(opcode)).some(i => branchInputs.has(i)) ||
+            Object.prototype.hasOwnProperty.call(getDefaultFields(opcode), 'SUBSTACK');
+        const args = order.map(p => `<${p}>`).join(' ');
+        const suffix = hasBranch ? ' :' : '';
+        lines.push(`  ${name}${args ? ` ${args}` : ''}${suffix}`);
+    }
+    return lines.join('\n');
+};
 
 /**
  * Cheatsheet of the most common and useful Scratch opcodes for the AI
@@ -117,69 +137,50 @@ ${projectSummary}
 OBJECTIF DE L'UTILISATEUR :
 "${userGoal || 'Améliorer ou créer le projet'}"
 
-FORMAT DE RÉPONSE ATTENDU :
-Tu dois répondre UNIQUEMENT par un bloc de code JSON valide (entouré de \`\`\`json et \`\`\`) contenant la liste ordonnée des "actions" à exécuter dans le projet.
+FORMAT DE RÉPONSE ATTENDU — SCRATCHSCRIPT (format compact recommandé) :
+Réponds UNIQUEMENT par un bloc de code (entouré de \`\`\`scratch et \`\`\`) écrit dans un mini-langage indenté, proche de Scratch. C'est BEAUCOUP plus court que le JSON et donc préférable, surtout pour les gros projets.
 
-Chaque action peut être de type :
-1. "CREATE_VAR" : { "type": "CREATE_VAR", "name": "nom_variable", "value": 0 }
-1b. "CREATE_LIST" : { "type": "CREATE_LIST", "name": "nom_liste", "value": ["a", "b"] }
-2. "CREATE_SPRITE" : { "type": "CREATE_SPRITE", "name": "NomSprite", "x": 0, "y": 0 }
-3. "SET_POSITION" : { "type": "SET_POSITION", "sprite": "NomSprite", "x": -100, "y": 0 }
-4. "CLEAR_BLOCKS" : { "type": "CLEAR_BLOCKS", "sprite": "NomSprite" } (optionnel, pour effacer les anciens scripts)
-5. "ADD_SCRIPT" : {
-     "type": "ADD_SCRIPT",
-     "sprite": "NomSprite",
-     "x": 50,
-     "y": 50,
-     "blocks": [
-       { "opcode": "event_whenflagclicked" },
-       { "opcode": "motion_gotoxy", "inputs": { "X": 0, "Y": 0 } },
-       ...
-     ]
-   }
+Règles du langage :
+- Une instruction par ligne : \`nom_bloc arg1 arg2 ...\` (les arguments sont positionnels, dans l'ordre indiqué par la référence ci-dessous).
+- L'IMBRICATION se fait par l'INDENTATION (2 espaces). Les blocs C (boucles, si) se terminent par \`:\` et leur contenu est indenté en dessous.
+- Un bloc rapporteur ou une condition s'écrit entre parenthèses : \`(random 1 10)\`, \`(touching _edge_)\`, \`(> (timer) 5)\`.
+- Le texte va entre guillemets : \`say "Bonjour"\`.
+- Déclarations :
+  * \`var nom = valeur\`        -> crée une variable globale
+  * \`list nom = a, b, c\`      -> crée une liste globale
+  * \`sprite Nom x y:\`         -> crée/sélectionne un sprite (x y optionnels), ses scripts sont indentés dessous
+  * \`stage:\`                  -> cible la scène
+  * \`clear Nom\`               -> efface les blocs d'un sprite
+- Un nouveau script commence à chaque bloc-chapeau (whenflagclicked, whenkey, whenclicked, whenreceive...) ou après une ligne vide.
+- Le \`si ... sinon\` s'écrit avec \`if (...):\` suivi, à la même indentation, de \`else:\`.
+
+RÉFÉRENCE DES COMMANDES (nom court <ARGS> ; un \`:\` final = bloc conteneur à corps indenté) :
+${listDslCommands()}
 
 ${OPCODES_CHEATSHEET}
 
-LISTE EXHAUSTIVE DES OPCODES AUTORISÉS (aucun autre ne sera accepté) :
-${listSupportedOpcodes()}
-
-EXEMPLE TYPE D'ACTION JSON ATTENDU :
-\`\`\`json
-{
-  "actions": [
-    { "type": "CREATE_VAR", "name": "score", "value": 0 },
-    { "type": "CREATE_SPRITE", "name": "Balle", "x": 0, "y": 0 },
-    {
-      "type": "ADD_SCRIPT",
-      "sprite": "Balle",
-      "x": 50,
-      "y": 50,
-      "blocks": [
-        { "opcode": "event_whenflagclicked" },
-        { "opcode": "motion_gotoxy", "inputs": { "X": 0, "Y": 0 } },
-        { "opcode": "motion_pointindirection", "inputs": { "DIRECTION": 45 } },
-        {
-          "opcode": "control_forever",
-          "inputs": {
-            "SUBSTACK": [
-              { "opcode": "motion_movesteps", "inputs": { "STEPS": 10 } },
-              { "opcode": "motion_ifonedgebounce" }
-            ]
-          }
-        }
-      ]
-    }
-  ]
-}
+EXEMPLE COMPLET EN SCRATCHSCRIPT :
+\`\`\`scratch
+var score = 0
+sprite Balle 0 0:
+  whenflagclicked
+  gotoxy 0 0
+  point 45
+  forever:
+    move 10
+    bounce
+    if (touching _edge_):
+      change score 1
 \`\`\`
 
 RÈGLES IMPORTANTES :
 - Fournis un code complet, fonctionnel et directement exécutable.
-- N'utilise QUE les opcodes listés dans le cheatsheet ci-dessus : ce sont exactement les blocs disponibles dans la palette de Scratch. Tout autre opcode sera refusé.
-- Ne mets PAS de valeurs dans les "inputs" attendant un bloc booléen (CONDITION, OPERAND...) : mets-y un objet { "opcode": ... }.
-- Les menus déroulants (KEY_OPTION, TOUCHINGOBJECTMENU, CLONE_OPTION, TO, TOWARDS, COSTUME...) se mettent dans "inputs". L'interface accepte aussi "fields" par tolérance, mais "inputs" est le format correct.
-- Tu peux omettre les x/y d'un ADD_SCRIPT : les scripts sont alors placés automatiquement les uns sous les autres, sans se superposer.
-- N'écris pas d'explication en dehors du bloc JSON, réponds UNIQUEMENT avec le bloc \`\`\`json ... \`\`\` pour que l'interface puisse l'exécuter directement.
+- N'utilise QUE les noms/opcodes listés dans la référence ci-dessus : ce sont exactement les blocs de la palette Scratch. Tout autre sera refusé.
+- Respecte l'ordre des arguments de la référence. Pour lever un doute tu peux nommer un argument : \`gotoxy X=0 Y=0\`.
+- Réponds UNIQUEMENT avec le bloc \`\`\`scratch ... \`\`\`, sans explication autour, pour que l'interface puisse l'exécuter directement.
+
+ALTERNATIVE (si tu préfères) — FORMAT JSON :
+Tu peux aussi répondre par un bloc \`\`\`json { "actions": [ ... ] } \`\`\`. Les actions possibles : CREATE_VAR, CREATE_LIST, CREATE_SPRITE, SET_POSITION, CLEAR_BLOCKS, et ADD_SCRIPT avec une liste "blocks" d'objets { "opcode", "inputs", "fields" } (les SUBSTACK sont des tableaux de blocs). Mais le format SCRATCHSCRIPT ci-dessus reste préférable car bien plus léger.
 `;
 };
 

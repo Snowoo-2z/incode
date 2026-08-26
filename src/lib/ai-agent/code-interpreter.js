@@ -7,6 +7,7 @@
 import {emptySprite} from '../empty-assets.js';
 import {buildScript, findUnknownOpcodes, generateId} from './block-builder.js';
 import {applyDefaultCostume} from './sprite-costumes.js';
+import {parseDSL} from './dsl-parser.js';
 
 /**
  * Horizontal/vertical layout used when the AI does not provide coordinates,
@@ -490,7 +491,12 @@ const interpretAndExecute = async (input, vm) => {
     }
 
     if (actions.length === 0) {
-        // Try fallback to line commands DSL
+        // Try the compact indentation-based DSL (Scratch-like text).
+        actions = parseDSL(input);
+    }
+
+    if (actions.length === 0) {
+        // Try fallback to the legacy uppercase line-command DSL.
         actions = parseLineCommands(input);
     }
 

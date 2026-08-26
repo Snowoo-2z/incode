@@ -122,7 +122,10 @@ class AIAgentModalComponent extends React.Component {
                 '  create-var <nom>     : Créer une variable globale',
                 '  clear <sprite>       : Supprimer les blocs d\'un sprite',
                 '  pong                 : Générer le jeu Pong complet',
-                '  clear-console        : Vider l\'affichage du terminal'
+                '  clear-console        : Vider l\'affichage du terminal',
+                '',
+                'Astuce : pour coller du code ScratchScript ou JSON multi-lignes,',
+                'utilisez l\'onglet « Assistant IA » (zone « Collez la réponse de l\'IA »).'
             );
             break;
 
@@ -246,14 +249,15 @@ class AIAgentModalComponent extends React.Component {
                         </div>
                     </div>
                     <p className={styles.sectionDesc}>
-                        Collez le code JSON ou les commandes reçues de l'IA, puis cliquez sur Exécuter.
+                        Collez la réponse de l'IA (format compact ScratchScript OU JSON), puis cliquez sur Exécuter.
+                        Les deux formats sont détectés automatiquement.
                     </p>
                     <textarea
                         className={classNames(styles.textarea, styles.textareaCode)}
                         rows={6}
                         value={this.state.aiCodeInput}
                         onChange={e => this.setState({aiCodeInput: e.target.value})}
-                        placeholder="Collez ici la réponse de l'IA (format JSON avec les actions)..."
+                        placeholder={'Collez ici la réponse de l\'IA.\nExemple ScratchScript :\nsprite Balle:\n  whenflagclicked\n  forever:\n    move 10\n    bounce'}
                     />
                     <div className={styles.buttonRow}>
                         <button
