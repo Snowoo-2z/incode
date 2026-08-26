@@ -173,10 +173,32 @@ sprite Balle 0 0:
       change score 1
 \`\`\`
 
+ÉDITIONS CIBLÉES (IMPORTANT pour modifier un projet existant sans tout réécrire) :
+Dans l'état du projet ci-dessus, chaque bloc est précédé de son ADRESSE entre crochets, ex. \`[1/3.1]\`. Le format est \`script/chemin\` : le numéro de script, puis la position du bloc dans sa pile, en descendant dans les blocs C avec des points (la branche « sinon » est notée \`~2\`). Ex. : \`2/4.2.1\` = script 2, 4e bloc, 2e bloc de son corps, 1er bloc du corps de celui-ci.
+Pour retoucher un projet, PRÉFÈRE ces directives plutôt que régénérer un sprite entier :
+  on <Sprite>:            -> sélectionne un sprite EXISTANT (n'en crée pas), puis indente les directives dessous
+    edit <adr> <bloc args>       -> remplace les valeurs/opcode d'un bloc existant. Ex: edit 1/3.1 move 25
+    delete <adr>                 -> supprime un bloc (et son contenu s'il est C)
+    insert after <adr>:          -> insère les blocs indentés APRÈS le bloc
+    insert before <adr>:         -> insère AVANT le bloc
+    insert into <adr>:           -> insère au DÉBUT du corps d'un bloc C (into2 = branche sinon)
+    replace <adr>:               -> remplace un bloc par les blocs indentés
+Toutes les adresses d'un même envoi sont résolues sur l'état AVANT modifications : lis-les directement dans l'état du projet sans te soucier des décalages.
+
+EXEMPLE D'ÉDITIONS CIBLÉES :
+\`\`\`scratch
+on Balle:
+  edit 1/3.1 move 25
+  insert after 1/2:
+    say "Partie lancee"
+  delete 1/3.2
+\`\`\`
+
 RÈGLES IMPORTANTES :
 - Fournis un code complet, fonctionnel et directement exécutable.
 - N'utilise QUE les noms/opcodes listés dans la référence ci-dessus : ce sont exactement les blocs de la palette Scratch. Tout autre sera refusé.
 - Respecte l'ordre des arguments de la référence. Pour lever un doute tu peux nommer un argument : \`gotoxy X=0 Y=0\`.
+- Pour une PETITE modification d'un projet existant, utilise les éditions ciblées (edit/insert/delete/replace) : c'est beaucoup plus court que de recréer le sprite.
 - Réponds UNIQUEMENT avec le bloc \`\`\`scratch ... \`\`\`, sans explication autour, pour que l'interface puisse l'exécuter directement.
 
 ALTERNATIVE (si tu préfères) — FORMAT JSON :

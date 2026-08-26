@@ -530,21 +530,96 @@ const parseAssignTail = tail => {
     return (unquoted !== '' && !isNaN(num) && /^[+-]?(\d+\.?\d*|\.\d+)$/.test(unquoted)) ? num : unquoted;
 };
 
+/** Keywords that introduce a targeted-edit directive rather than a block. */
+const EDIT_KEYWORDS = new Set(['edit', 'delete', 'del', 'insert', 'replace']);
+
 /**
- * Emits ADD_SCRIPT actions for a sprite/stage body.
+ * Parses a single edit-directive node into an action, or returns null if the
+ * node is not an edit directive.
+ * @param {object} node directive node {text, children}
+ * @param {?string} spriteName current target name
+ * @returns {?object} action
+ */
+const parseEditDirective = (node, spriteName) => {
+    const lineText = node.text.replace(/:\s*$/, '');
+    const parts = lineText.split(/\s+/);
+    const keyword = parts[0].toLowerCase();
+    if (!EDIT_KEYWORDS.has(keyword)) return null;
+
+    const withSprite = action => {
+        if (spriteName) action.sprite = spriteName;
+        return action;
+    };
+
+    if (keyword === 'edit') {
+        const address = parts[1];
+        if (!address) return null;
+        const callStr = lineText.slice(lineText.indexOf(address) + address.length).trim();
+        const action = {type: 'UPDATE_BLOCK', address};
+        if (callStr) {
+            const spec = parseCall(callStr);
+            action.opcode = spec.opcode;
+            if (spec.inputs) action.inputs = spec.inputs;
+        }
+        return withSprite(action);
+    }
+    if (keyword === 'delete' || keyword === 'del') {
+        const address = parts[1];
+        if (!address) return null;
+        return withSprite({type: 'DELETE_BLOCK', address});
+    }
+    if (keyword === 'insert') {
+        const posWords = {after: 'after', before: 'before', into: 'into', into2: 'into2'};
+        let position = 'after';
+        let address = parts[1];
+        if (posWords[(parts[1] || '').toLowerCase()]) {
+            position = posWords[parts[1].toLowerCase()];
+            address = parts[2];
+        }
+        if (!address) return null;
+        return withSprite({type: 'INSERT_BLOCKS', address, position, blocks: buildStack(node.children || [])});
+    }
+    // replace
+    const address = parts[1];
+    if (!address) return null;
+    return withSprite({type: 'REPLACE_BLOCK', address, blocks: buildStack(node.children || [])});
+};
+
+/**
+ * Emits actions for a sprite/stage body: edit directives become edit actions,
+ * everything else is grouped into ADD_SCRIPT scripts.
  * @param {?string} spriteName target name (null -> editing target)
  * @param {Array<object>} bodyNodes body nodes
  * @param {Array<object>} actions accumulator
  */
 const emitScripts = (spriteName, bodyNodes, actions) => {
-    for (const scriptNodes of splitScripts(bodyNodes)) {
-        const blocks = buildStack(scriptNodes);
-        if (blocks.length) {
-            const action = {type: 'ADD_SCRIPT', blocks};
-            if (spriteName) action.sprite = spriteName;
-            actions.push(action);
+    // Separate edit directives (handled individually, order preserved) from
+    // plain block lines (grouped into scripts).
+    let scriptBuffer = [];
+    const flushScripts = () => {
+        if (!scriptBuffer.length) return;
+        for (const scriptNodes of splitScripts(scriptBuffer)) {
+            const blocks = buildStack(scriptNodes);
+            if (blocks.length) {
+                const action = {type: 'ADD_SCRIPT', blocks};
+                if (spriteName) action.sprite = spriteName;
+                actions.push(action);
+            }
+        }
+        scriptBuffer = [];
+    };
+
+    for (const node of bodyNodes) {
+        const keyword = node.text.trim().split(/\s+/)[0].toLowerCase();
+        if (EDIT_KEYWORDS.has(keyword)) {
+            flushScripts();
+            const editAction = parseEditDirective(node, spriteName);
+            if (editAction) actions.push(editAction);
+        } else {
+            scriptBuffer.push(node);
         }
     }
+    flushScripts();
 };
 
 /**
@@ -573,8 +648,12 @@ const scoreActions = actions => {
         }
     };
     for (const action of actions) {
-        if (action.type === 'ADD_SCRIPT') walk(action.blocks);
-        else directives++;
+        if (action.type === 'ADD_SCRIPT' || action.type === 'INSERT_BLOCKS' || action.type === 'REPLACE_BLOCK') {
+            walk(action.blocks);
+            directives++;
+        } else {
+            directives++;
+        }
     }
     return {known, unknown, directives};
 };
@@ -650,6 +729,17 @@ const parseDSL = text => {
                 flushPending();
                 const spriteName = parts[1] || currentSprite;
                 if (spriteName) actions.push({type: 'CLEAR_BLOCKS', sprite: spriteName});
+            } else if (keyword === 'on' || keyword === 'target') {
+                // on <Sprite>:  -> select an EXISTING sprite (no CREATE_SPRITE);
+                // its indented body may contain edit directives or new scripts.
+                flushPending();
+                currentSprite = parts[1] ? parts[1].replace(/:$/, '') : currentSprite;
+                emitScripts(currentSprite, node.children, actions);
+            } else if (EDIT_KEYWORDS.has(keyword)) {
+                // Top-level edit directive (edit / delete / insert / replace).
+                flushPending();
+                const editAction = parseEditDirective(node, currentSprite);
+                if (editAction) actions.push(editAction);
             } else {
                 // A bare block line at the top level: accumulate into a script
                 // for the current sprite (or the editing target when none).

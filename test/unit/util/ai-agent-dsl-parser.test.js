@@ -175,6 +175,53 @@ describe('DSL parser — programs', () => {
     });
 });
 
+describe('DSL parser — targeted edit directives', () => {
+    test('parses edit / delete / insert / replace under "on Sprite:"', () => {
+        const actions = parseDSL([
+            'on Balle:',
+            '  edit 1/3.1 move 25',
+            '  delete 1/2',
+            '  insert after 1/1:',
+            '    say "Go"',
+            '  insert into 1/3:',
+            '    bounce',
+            '  replace 1/4:',
+            '    think "hmm"',
+            '    show'
+        ].join('\n'));
+
+        expect(actions.map(a => a.type)).toEqual([
+            'UPDATE_BLOCK', 'DELETE_BLOCK', 'INSERT_BLOCKS', 'INSERT_BLOCKS', 'REPLACE_BLOCK'
+        ]);
+        // "on" selects an existing sprite: no CREATE_SPRITE emitted.
+        expect(actions.some(a => a.type === 'CREATE_SPRITE')).toBe(false);
+        expect(actions.every(a => a.sprite === 'Balle')).toBe(true);
+
+        expect(actions[0]).toEqual({
+            type: 'UPDATE_BLOCK', address: '1/3.1', sprite: 'Balle',
+            opcode: 'motion_movesteps', inputs: {STEPS: 25}
+        });
+        expect(actions[2].position).toBe('after');
+        expect(actions[2].blocks[0].opcode).toBe('looks_say');
+        expect(actions[3].position).toBe('into');
+        expect(actions[4].blocks.map(b => b.opcode)).toEqual(['looks_think', 'looks_show']);
+    });
+
+    test('supports insert before/into2 and del alias', () => {
+        const actions = parseDSL([
+            'on S:',
+            '  insert before 1/1:',
+            '    wait 1',
+            '  insert into2 1/2:',
+            '    say "else"',
+            '  del 1/3'
+        ].join('\n'));
+        expect(actions[0].position).toBe('before');
+        expect(actions[1].position).toBe('into2');
+        expect(actions[2].type).toBe('DELETE_BLOCK');
+    });
+});
+
 describe('DSL parser — confidence guard', () => {
     test('does not swallow the legacy uppercase CLI commands', () => {
         expect(parseDSL('CREATE_SPRITE Foo 0 0')).toEqual([]);

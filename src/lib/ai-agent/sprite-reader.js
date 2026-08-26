@@ -3,6 +3,8 @@
  * into human- and AI-readable representations.
  */
 
+import {listAddressedScripts} from './block-address.js';
+
 // Helper to translate opcodes and arguments into concise pseudo-code
 const formatBlockToText = (block, blocksMap, indent = 0) => {
     if (!block) return '';
@@ -348,6 +350,70 @@ const readAllTargets = vm => {
 };
 
 /**
+ * Renders a single hydrated block as a compact one-liner for the addressed
+ * listing: "opcode arg=val arg=(reporter ...)". This is generic (reads the
+ * block's own inputs/fields), so it never needs a per-opcode case and cannot
+ * drift when new blocks are added.
+ * @param {object} block hydrated VM block
+ * @param {object} blocksMap target block map
+ * @returns {string} one-line description
+ */
+const renderBlockLine = (block, blocksMap) => {
+    if (!block) return '';
+    const opcode = block.opcode || '';
+    const parts = [];
+
+    const branchInputs = {SUBSTACK: true, SUBSTACK2: true};
+
+    const describeInput = input => {
+        if (!input) return '';
+        // A reporter/boolean block plugged in (and not merely its shadow).
+        if (input.block && input.block !== input.shadow && blocksMap[input.block]) {
+            return `(${renderBlockLine(blocksMap[input.block], blocksMap)})`;
+        }
+        // Otherwise read the value carried by the shadow block.
+        const shadowId = input.shadow || input.block;
+        const shadow = shadowId ? blocksMap[shadowId] : null;
+        if (shadow && shadow.fields) {
+            const firstField = Object.values(shadow.fields)[0];
+            if (firstField) return String(firstField.value);
+        }
+        return '';
+    };
+
+    for (const [name, input] of Object.entries(block.inputs || {})) {
+        if (branchInputs[name]) continue;
+        parts.push(`${name}=${describeInput(input)}`);
+    }
+    for (const [name, field] of Object.entries(block.fields || {})) {
+        parts.push(`${name}=${field.value}`);
+    }
+
+    return `${opcode}${parts.length ? ' ' + parts.join(' ') : ''}`;
+};
+
+/**
+ * Formats a target's scripts as an addressed, indented listing so the AI can
+ * point at any single block for targeted edits (UPDATE/DELETE/INSERT).
+ * @param {object} target VM target
+ * @param {string} indentPrefix leading whitespace for each line
+ * @returns {string} formatted listing
+ */
+const formatAddressedScripts = (target, indentPrefix = '') => {
+    const scripts = listAddressedScripts(target, renderBlockLine);
+    if (!scripts.length) return '';
+    const out = [];
+    for (const s of scripts) {
+        out.push(`${indentPrefix}Script ${s.scriptIndex} (x:${s.x}, y:${s.y}) :`);
+        for (const e of s.entries) {
+            const pad = '  '.repeat(e.depth);
+            out.push(`${indentPrefix}  [${e.address}] ${pad}${e.text}`);
+        }
+    }
+    return out.join('\n');
+};
+
+/**
  * Format a comprehensive, clean project summary text for the AI
  */
 const formatProjectSummary = vm => {
@@ -357,22 +423,21 @@ const formatProjectSummary = vm => {
     const stage = targets.find(t => t.isStage);
     const sprites = targets.filter(t => !t.isStage);
 
+    // Map target id -> real VM target so we can render addressed scripts.
+    const vmTargets = (vm && vm.runtime && vm.runtime.targets) || [];
+    const realById = {};
+    for (const t of vmTargets) realById[t.id] = t;
+
     let output = '=== ÉTAT ACTUEL DU PROJET SCRATCH ===\n';
+    output += '(Chaque bloc est préfixé par son adresse [script/chemin] pour les éditions ciblées.)\n';
 
     if (stage) {
         output += `\n[SCÈNE] (ID: ${stage.id})\n`;
         const globalVars = stage.variables.map(v => `${v.name} = ${JSON.stringify(v.value)}`).join(', ');
         output += `- Variables globales : ${globalVars || 'aucune'}\n`;
         output += `- Arrière-plans : ${stage.costumes.map(c => c.name).join(', ') || 'aucun'}\n`;
-        if (stage.scripts.length > 0) {
-            output += `- Scripts (${stage.scripts.length}) :\n`;
-            stage.scripts.forEach((s, idx) => {
-                output += `  --- Script ${idx + 1} à (x: ${s.x}, y: ${s.y}) ---\n`;
-                output += s.text.split('\n').map(l => '  ' + l).join('\n') + '\n';
-            });
-        } else {
-            output += `- Scripts : aucun\n`;
-        }
+        const stageScripts = realById[stage.id] ? formatAddressedScripts(realById[stage.id], '  ') : '';
+        output += stageScripts ? `- Scripts :\n${stageScripts}\n` : `- Scripts : aucun\n`;
     }
 
     output += `\n[SPRITES] (Total: ${sprites.length})\n`;
@@ -386,15 +451,8 @@ const formatProjectSummary = vm => {
                 output += `   - Variables locales: ${sp.variables.map(v => `${v.name} = ${JSON.stringify(v.value)}`).join(', ')}\n`;
             }
             output += `   - Costumes: ${sp.costumes.map(c => c.name).join(', ') || 'aucun'}\n`;
-            if (sp.scripts.length > 0) {
-                output += `   - Scripts (${sp.scripts.length}) :\n`;
-                sp.scripts.forEach((s, idx) => {
-                    output += `     --- Script ${idx + 1} à (x: ${s.x}, y: ${s.y}) ---\n`;
-                    output += s.text.split('\n').map(l => '     ' + l).join('\n') + '\n';
-                });
-            } else {
-                output += `   - Scripts: aucun script pour l'instant.\n`;
-            }
+            const spScripts = realById[sp.id] ? formatAddressedScripts(realById[sp.id], '   ') : '';
+            output += spScripts ? `   - Scripts :\n${spScripts}\n` : `   - Scripts: aucun script pour l'instant.\n`;
         });
     }
 
@@ -405,6 +463,8 @@ export {
     readTarget,
     readAllTargets,
     formatProjectSummary,
+    formatAddressedScripts,
+    renderBlockLine,
     getTargetScripts,
     formatBlockToText
 };
