@@ -166,6 +166,10 @@ module.exports = [
             ])
         },
         optimization: {
+            // Render's free plan has very limited build memory. Allow builders to
+            // skip Terser/UglifyJS minification and the /dist library build when
+            // deploying the playground (nothing is removed, this is opt-in).
+            minimize: process.env.NODE_ENV === 'production' && !process.env.SKIP_MINIFY,
             splitChunks: {
                 chunks: 'all',
                 minChunks: 2,
@@ -245,7 +249,7 @@ module.exports = [
         ])
     })
 ].concat(
-    process.env.NODE_ENV === 'production' || process.env.BUILD_MODE === 'dist' ? (
+    !process.env.SKIP_DIST && (process.env.NODE_ENV === 'production' || process.env.BUILD_MODE === 'dist') ? (
         // export as library
         defaultsDeep({}, base, {
             target: 'web',

@@ -77,23 +77,30 @@ const extractFirstMatchingFile = (filter, relativeDestDir, zipBuffer) => new Pro
     }
 });
 
-const downloadMicrobitHex = async () => {
-    const url = 'https://packagerdata.turbowarp.org/scratch-microbit-1.2.0.hex.zip';
-    const expectedSHA256 = 'dfd574b709307fe76c44dbb6b0ac8942e7908f4d5c18359fae25fbda3c9f4399';
-    console.info(`Downloading ${url}`);
-    const response = await crossFetch(url);
-    const zipBuffer = Buffer.from(await response.arrayBuffer());
-    const sha256 = nodeCrypto.createHash('sha-256').update(zipBuffer).digest('hex');
-    if (sha256 !== expectedSHA256) {
-        throw new Error(`microbit hex has SHA-256 ${sha256} but expected ${expectedSHA256}`);
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const fetchWithRetry = async (url, attempts = 3) => {
+    let lastError;
+    for (let i = 1; i <= attempts; i++) {
+        try {
+            console.info(`Attempt ${i}/${attempts}: downloading ${url}`);
+            const response = await crossFetch(url);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} while downloading ${url}`);
+            }
+            return response;
+        } catch (error) {
+            lastError = error;
+            console.warn(`Download attempt ${i}/${attempts} failed: ${error.message}`);
+            if (i < attempts) {
+                await sleep(i * 3000);
+            }
+        }
     }
-    const relativeHexDir = path.join('static', 'microbit');
-    const hexFileName = await extractFirstMatchingFile(
-        entry => /\.hex$/.test(entry.fileName),
-        path.join('static', 'microbit'),
-        zipBuffer
-    );
-    const relativeHexFile = path.join(relativeHexDir, hexFileName);
+    throw lastError;
+};
+
+const writeGeneratedHexFile = relativeHexFile => {
     const relativeGeneratedDir = path.join('src', 'generated');
     const relativeGeneratedFile = path.join(relativeGeneratedDir, 'microbit-hex-url.cjs');
     const absoluteGeneratedDir = path.join(basePath, relativeGeneratedDir);
@@ -114,6 +121,45 @@ const downloadMicrobitHex = async () => {
         ].join('\n')
     );
     console.info(`Wrote ${relativeGeneratedFile}`);
+    return absoluteGeneratedFile;
+};
+
+const microbitFilesAlreadyPresent = () => {
+    const relativeHexDir = path.join('static', 'microbit');
+    const hexDir = path.join(basePath, relativeHexDir);
+    if (!fs.existsSync(hexDir)) {
+        return false;
+    }
+    const hexFile = fs.readdirSync(hexDir).find(file => file.endsWith('.hex'));
+    const generatedFile = path.join(basePath, 'src', 'generated', 'microbit-hex-url.cjs');
+    return Boolean(hexFile) && fs.existsSync(generatedFile);
+};
+
+const downloadMicrobitHex = async () => {
+    const url = process.env.MICROBIT_HEX_URL ||
+        'https://packagerdata.turbowarp.org/scratch-microbit-1.2.0.hex.zip';
+    const expectedSHA256 = process.env.MICROBIT_HEX_SHA256 ||
+        'dfd574b709307fe76c44dbb6b0ac8942e7908f4d5c18359fae25fbda3c9f4399';
+
+    if (microbitFilesAlreadyPresent()) {
+        console.info('micro:bit hex and generated file already present; skipping download');
+        return;
+    }
+
+    const response = await fetchWithRetry(url);
+    const zipBuffer = Buffer.from(await response.arrayBuffer());
+    const sha256 = nodeCrypto.createHash('sha-256').update(zipBuffer).digest('hex');
+    if (sha256 !== expectedSHA256) {
+        throw new Error(`microbit hex has SHA-256 ${sha256} but expected ${expectedSHA256}`);
+    }
+    const relativeHexDir = path.join('static', 'microbit');
+    const hexFileName = await extractFirstMatchingFile(
+        entry => /\.hex$/.test(entry.fileName),
+        path.join('static', 'microbit'),
+        zipBuffer
+    );
+    const relativeHexFile = path.join(relativeHexDir, hexFileName);
+    writeGeneratedHexFile(relativeHexFile);
 };
 
 const prepublish = async () => {
