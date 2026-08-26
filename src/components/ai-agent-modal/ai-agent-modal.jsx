@@ -205,7 +205,8 @@ class AIAgentModalComponent extends React.Component {
                 <div className={styles.section}>
                     <div className={styles.sectionHeader}>
                         <div className={styles.sectionTitle}>
-                            <span>1. Que souhaitez-vous créer ?</span>
+                            <span className={styles.stepNumber}>{'1'}</span>
+                            <span>Que souhaitez-vous créer ?</span>
                         </div>
                     </div>
                     <p className={styles.sectionDesc}>
@@ -240,7 +241,8 @@ class AIAgentModalComponent extends React.Component {
                 <div className={styles.section}>
                     <div className={styles.sectionHeader}>
                         <div className={styles.sectionTitle}>
-                            <span>2. Collez la réponse de l'IA</span>
+                            <span className={styles.stepNumber}>{'2'}</span>
+                            <span>Collez la réponse de l'IA</span>
                         </div>
                     </div>
                     <p className={styles.sectionDesc}>
@@ -273,7 +275,8 @@ class AIAgentModalComponent extends React.Component {
                 <div className={styles.section}>
                     <div className={styles.sectionHeader}>
                         <div className={styles.sectionTitle}>
-                            <span>3. Journal d'exécution & Suivi</span>
+                            <span className={styles.stepNumber}>{'3'}</span>
+                            <span>Journal d'exécution & Suivi</span>
                         </div>
                     </div>
                     <div className={styles.terminalBox}>
@@ -295,6 +298,12 @@ class AIAgentModalComponent extends React.Component {
     renderCliTab () {
         return (
             <div className={styles.cliContainer}>
+                <div className={styles.cliToolbar}>
+                    <span className={classNames(styles.cliDot, styles.cliDotRed)} />
+                    <span className={classNames(styles.cliDot, styles.cliDotYellow)} />
+                    <span className={classNames(styles.cliDot, styles.cliDotGreen)} />
+                    <span className={styles.cliToolbarTitle}>{'scratch-cli — bash'}</span>
+                </div>
                 <div className={styles.cliOutput}>
                     {this.state.cliLogs.join('\n')}
                 </div>
@@ -328,35 +337,47 @@ class AIAgentModalComponent extends React.Component {
                         🔄 Rafraîchir
                     </button>
                 </div>
-                <div className={styles.spriteList}>
-                    {this.state.targets.map(t => (
-                        <div key={t.id} className={styles.spriteCard}>
-                            <div className={styles.spriteCardHeader}>
-                                <span>{t.isStage ? '🎭 Scène' : `🐱 ${t.name}`}</span>
-                                <span className={styles.badge}>{t.scripts.length} script(s) - {t.blocksCount} blocs</span>
-                            </div>
-                            {!t.isStage && (
-                                <div>
-                                    Position: x: {t.x}, y: {t.y} | Taille: {t.size}% | Direction: {t.direction}°
+                {this.state.targets.length === 0 ? (
+                    <div className={styles.emptyState}>
+                        <span className={styles.emptyStateIcon}>{'📭'}</span>
+                        <span>{'Aucun sprite pour le moment. Créez-en un ou chargez un projet.'}</span>
+                    </div>
+                ) : (
+                    <div className={styles.spriteList}>
+                        {this.state.targets.map(t => (
+                            <div key={t.id} className={styles.spriteCard}>
+                                <div className={styles.spriteCardHeader}>
+                                    <span>{t.isStage ? '🎭 Scène' : `🐱 ${t.name}`}</span>
+                                    <span className={styles.badge}>{t.scripts.length} script(s) · {t.blocksCount} blocs</span>
                                 </div>
-                            )}
-                            {t.variables.length > 0 && (
-                                <div>
-                                    Variables : {t.variables.map(v => `${v.name} (${v.value})`).join(', ')}
-                                </div>
-                            )}
-                            {t.scripts.length > 0 ? (
-                                t.scripts.map((s, idx) => (
-                                    <div key={idx} className={styles.scriptPreview}>
-                                        {`// Script ${idx + 1} à (x: ${s.x}, y: ${s.y})\n${s.text}`}
+                                {!t.isStage && (
+                                    <div className={styles.spriteMeta}>
+                                        <span className={styles.metaChip}>{`x: ${t.x}`}</span>
+                                        <span className={styles.metaChip}>{`y: ${t.y}`}</span>
+                                        <span className={styles.metaChip}>{`Taille: ${t.size}%`}</span>
+                                        <span className={styles.metaChip}>{`Direction: ${t.direction}°`}</span>
                                     </div>
-                                ))
-                            ) : (
-                                <div style={{opacity: 0.6, fontSize: '0.8rem'}}>Aucun script sur ce sprite.</div>
-                            )}
-                        </div>
-                    ))}
-                </div>
+                                )}
+                                {t.variables.length > 0 && (
+                                    <div className={styles.spriteMeta}>
+                                        {t.variables.map(v => (
+                                            <span key={v.name} className={styles.metaChip}>{`${v.name} = ${v.value}`}</span>
+                                        ))}
+                                    </div>
+                                )}
+                                {t.scripts.length > 0 ? (
+                                    t.scripts.map((s, idx) => (
+                                        <div key={idx} className={styles.scriptPreview}>
+                                            {`// Script ${idx + 1} à (x: ${s.x}, y: ${s.y})\n${s.text}`}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className={styles.scriptEmpty}>{'Aucun script sur ce sprite.'}</div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     }
@@ -368,6 +389,15 @@ class AIAgentModalComponent extends React.Component {
                 contentLabel="Terminal Agent IA"
                 onRequestClose={this.props.onClose}
             >
+                <div className={styles.hero}>
+                    <div className={styles.headerIcon}>{'🤖'}</div>
+                    <div className={styles.headerText}>
+                        <span className={styles.headerTitle}>{'Votre assistant de code Scratch'}</span>
+                        <span className={styles.headerSubtitle}>
+                            {'Générez un prompt, exécutez la réponse de l\'IA et inspectez vos sprites.'}
+                        </span>
+                    </div>
+                </div>
                 <div className={styles.body}>
                     {/* Navigation Tabs */}
                     <div className={styles.tabs}>
@@ -377,7 +407,7 @@ class AIAgentModalComponent extends React.Component {
                             })}
                             onClick={() => this.setState({activeTab: 'assistant'})}
                         >
-                            🤖 Assistant IA (Prompt & Exécution)
+                            {'🤖 Assistant IA'}
                         </button>
                         <button
                             className={classNames(styles.tabButton, {
@@ -385,7 +415,7 @@ class AIAgentModalComponent extends React.Component {
                             })}
                             onClick={() => this.setState({activeTab: 'cli'})}
                         >
-                            💻 Console CLI
+                            {'💻 Console CLI'}
                         </button>
                         <button
                             className={classNames(styles.tabButton, {
@@ -396,7 +426,7 @@ class AIAgentModalComponent extends React.Component {
                                 this.refreshTargets();
                             }}
                         >
-                            🔍 Inspecteur de Sprites
+                            {'🔍 Inspecteur'}
                         </button>
                     </div>
 
