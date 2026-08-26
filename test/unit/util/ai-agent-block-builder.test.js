@@ -254,6 +254,56 @@ describe('ai-agent block builder', () => {
         expect(names.filter(n => n === 'score1')).toHaveLength(1);
     });
 
+    test('builds list blocks with a real list-type variable field', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'data_addtolist', inputs: {ITEM: 'pomme'}, list: 'courses'},
+            {opcode: 'data_insertatlist', inputs: {ITEM: 'banane', INDEX: 1}, fields: {LIST: 'courses'}},
+            {opcode: 'data_deleteoflist', inputs: {INDEX: 2}, list: 'courses'}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const add = blocks.find(b => b.opcode === 'data_addtolist');
+        expect(add.fields.LIST.value).toBe('courses');
+        expect(add.fields.LIST.variableType).toBe('list');
+        expect(add.fields.LIST.id).toBeDefined();
+        // ITEM is a text shadow, INDEX is an integer shadow.
+        expect(byId[add.inputs.ITEM.block].opcode).toBe('text');
+        const del = blocks.find(b => b.opcode === 'data_deleteoflist');
+        expect(byId[del.inputs.INDEX.block].opcode).toBe('math_integer');
+
+        // The same list is reused across the three blocks, created once on stage.
+        const listVars = Object.values(context.stage.variables).filter(v => v.type === 'list');
+        expect(listVars).toHaveLength(1);
+        expect(listVars[0].name).toBe('courses');
+    });
+
+    test('nests a list reporter inside a condition and a value slot', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {
+                opcode: 'control_if',
+                inputs: {
+                    CONDITION: {opcode: 'data_listcontainsitem', inputs: {ITEM: 'pomme'}, list: 'courses'},
+                    SUBSTACK: [
+                        {opcode: 'looks_say', inputs: {MESSAGE: {opcode: 'data_itemoflist', inputs: {INDEX: 1}, list: 'courses'}}}
+                    ]
+                }
+            }
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const ifBlock = blocks.find(b => b.opcode === 'control_if');
+        const cond = byId[ifBlock.inputs.CONDITION.block];
+        expect(cond.opcode).toBe('data_listcontainsitem');
+        expect(cond.fields.LIST.variableType).toBe('list');
+
+        const say = blocks.find(b => b.opcode === 'looks_say');
+        const reporter = byId[say.inputs.MESSAGE.block];
+        expect(reporter.opcode).toBe('data_itemoflist');
+        expectConsistent(blocks);
+    });
+
     test('gives control_stop the mutation scratch-blocks expects', () => {
         const context = makeContext();
         const blocks = buildScript([{opcode: 'control_stop', fields: {STOP_OPTION: 'all'}}], 0, 0, context);

@@ -78,6 +78,18 @@ CHEATSHEET DES OPCODES SCRATCH 3.0 COURANTS :
   * data_changevariableby : fields: { VARIABLE: "nom_variable" }, inputs: { VALUE: 1 }
   * data_showvariable, data_hidevariable : fields: { VARIABLE: "nom_variable" }
   * data_variable : fields: { VARIABLE: "nom_variable" } (Reporter valeur de variable)
+
+- Listes (fields: { LIST: "nom_liste" }) :
+  * data_addtolist : inputs: { ITEM: "valeur" }, fields: { LIST: "nom_liste" }
+  * data_deleteoflist : inputs: { INDEX: 1 }, fields: { LIST: "nom_liste" }
+  * data_deletealloflist : fields: { LIST: "nom_liste" }
+  * data_insertatlist : inputs: { ITEM: "valeur", INDEX: 1 }, fields: { LIST: "nom_liste" }
+  * data_replaceitemoflist : inputs: { INDEX: 1, ITEM: "valeur" }, fields: { LIST: "nom_liste" }
+  * data_itemoflist : inputs: { INDEX: 1 }, fields: { LIST: "nom_liste" } (Reporter)
+  * data_itemnumoflist : inputs: { ITEM: "valeur" }, fields: { LIST: "nom_liste" } (Reporter)
+  * data_lengthoflist : fields: { LIST: "nom_liste" } (Reporter)
+  * data_listcontainsitem : inputs: { ITEM: "valeur" }, fields: { LIST: "nom_liste" } (Condition)
+  * data_showlist, data_hidelist : fields: { LIST: "nom_liste" }
 `;
 
 /**
@@ -99,6 +111,7 @@ Tu dois répondre UNIQUEMENT par un bloc de code JSON valide (entouré de \`\`\`
 
 Chaque action peut être de type :
 1. "CREATE_VAR" : { "type": "CREATE_VAR", "name": "nom_variable", "value": 0 }
+1b. "CREATE_LIST" : { "type": "CREATE_LIST", "name": "nom_liste", "value": ["a", "b"] }
 2. "CREATE_SPRITE" : { "type": "CREATE_SPRITE", "name": "NomSprite", "x": 0, "y": 0 }
 3. "SET_POSITION" : { "type": "SET_POSITION", "sprite": "NomSprite", "x": -100, "y": 0 }
 4. "CLEAR_BLOCKS" : { "type": "CLEAR_BLOCKS", "sprite": "NomSprite" } (optionnel, pour effacer les anciens scripts)

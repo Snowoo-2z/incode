@@ -35,6 +35,7 @@ const generateId = (prefix = 'block_') =>
 
 const SCALAR_TYPE = '';
 const BROADCAST_TYPE = 'broadcast_msg';
+const LIST_TYPE = 'list';
 
 /**
  * Creates a hydrated block object.
@@ -97,6 +98,36 @@ const resolveOrCreateVariable = (varName, context) => {
     const newId = generateId('var_');
     if (stage && stage.createVariable) {
         stage.createVariable(newId, varName, SCALAR_TYPE, false);
+    }
+    return newId;
+};
+
+/**
+ * Resolves a list id, creating the list on the stage if needed.
+ * Lists are variables of the 'list' type; without this the list blocks would
+ * reference a non-existent list and render broken.
+ * @param {string} listName list name
+ * @param {object} context {vm, target}
+ * @returns {string} list id
+ */
+const resolveOrCreateList = (listName, context) => {
+    const {vm, target} = context;
+    if (!vm || !vm.runtime) return generateId('list_');
+
+    const stage = vm.runtime.getTargetForStage ? vm.runtime.getTargetForStage() : null;
+    let existing = null;
+
+    if (target && target.lookupVariableByNameAndType) {
+        existing = target.lookupVariableByNameAndType(listName, LIST_TYPE);
+    }
+    if (!existing && stage && stage.lookupVariableByNameAndType) {
+        existing = stage.lookupVariableByNameAndType(listName, LIST_TYPE);
+    }
+    if (existing) return existing.id;
+
+    const newId = generateId('list_');
+    if (stage && stage.createVariable) {
+        stage.createVariable(newId, listName, LIST_TYPE, false);
     }
     return newId;
 };
@@ -273,6 +304,14 @@ const buildFields = (block, givenFields, context) => {
                 id: resolveOrCreateVariable(varName, context),
                 variableType: SCALAR_TYPE
             };
+        } else if (name === 'LIST' || (descriptor && descriptor.list)) {
+            const listName = String(value);
+            block.fields[name] = {
+                name,
+                value: listName,
+                id: resolveOrCreateList(listName, context),
+                variableType: LIST_TYPE
+            };
         } else if (name === 'BROADCAST_OPTION' || (descriptor && descriptor.broadcast)) {
             const msgName = String(value);
             block.fields[name] = {
@@ -368,6 +407,9 @@ const buildSingleBlock = (spec, blockId, parentId, blocksList, context) => {
     // Shorthands that target a field rendered directly on the block.
     if (spec.variable && typeof givenFields.VARIABLE === 'undefined') {
         givenFields.VARIABLE = {variable: true, value: spec.variable};
+    }
+    if (spec.list && typeof givenFields.LIST === 'undefined') {
+        givenFields.LIST = {list: true, value: spec.list};
     }
     if (spec.key && opcode === 'event_whenkeypressed' && typeof givenFields.KEY_OPTION === 'undefined') {
         givenFields.KEY_OPTION = spec.key;
@@ -490,6 +532,7 @@ export {
     buildBlockStack,
     resolveOrCreateVariable,
     resolveOrCreateBroadcast,
+    resolveOrCreateList,
     findUnknownOpcodes,
     generateId
 };

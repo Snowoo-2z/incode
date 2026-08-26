@@ -22,11 +22,15 @@
 const NUM = {shadow: 'math_number', field: 'NUM'};
 const WHOLE = {shadow: 'math_whole_number', field: 'NUM'};
 const POSITIVE = {shadow: 'math_positive_number', field: 'NUM'};
+const INTEGER = {shadow: 'math_integer', field: 'NUM'};
 const ANGLE = {shadow: 'math_angle', field: 'NUM'};
 const TEXT = {shadow: 'text', field: 'TEXT'};
 const BOOL = {shadow: null};
 const BRANCH = {branch: true};
 const menu = (shadow, field, defaultValue = '') => ({shadow, field, isMenu: true, defaultValue});
+
+/** Shorthand for a "list" field (field_variable of the list type). */
+const LIST = {list: true, value: 'ma liste'};
 
 const BLOCK_SCHEMA = {
     /* ------------------------------------------------------------------ Events */
@@ -165,7 +169,21 @@ const BLOCK_SCHEMA = {
         fields: {VARIABLE: {variable: true, value: 'ma variable'}}
     },
     data_showvariable: {fields: {VARIABLE: {variable: true, value: 'ma variable'}}},
-    data_hidevariable: {fields: {VARIABLE: {variable: true, value: 'ma variable'}}}
+    data_hidevariable: {fields: {VARIABLE: {variable: true, value: 'ma variable'}}},
+
+    /* ------------------------------------------------------------------ Lists */
+    data_listcontents: {fields: {LIST}},
+    data_addtolist: {inputs: {ITEM: TEXT}, fields: {LIST}},
+    data_deleteoflist: {inputs: {INDEX: INTEGER}, fields: {LIST}},
+    data_deletealloflist: {fields: {LIST}},
+    data_insertatlist: {inputs: {ITEM: TEXT, INDEX: INTEGER}, fields: {LIST}},
+    data_replaceitemoflist: {inputs: {INDEX: INTEGER, ITEM: TEXT}, fields: {LIST}},
+    data_itemoflist: {inputs: {INDEX: INTEGER}, fields: {LIST}},
+    data_itemnumoflist: {inputs: {ITEM: TEXT}, fields: {LIST}},
+    data_lengthoflist: {fields: {LIST}},
+    data_listcontainsitem: {inputs: {ITEM: TEXT}, fields: {LIST}},
+    data_showlist: {fields: {LIST}},
+    data_hidelist: {fields: {LIST}}
 };
 
 /**
@@ -178,7 +196,8 @@ const INPUT_NAME_FALLBACK = {
     NUM: NUM, NUM1: NUM, NUM2: NUM, FROM: NUM, TO: NUM, VOLUME: NUM,
     MESSAGE: TEXT, QUESTION: TEXT, STRING: TEXT, STRING1: TEXT, STRING2: TEXT,
     OPERAND: BOOL, OPERAND1: TEXT, OPERAND2: TEXT, CONDITION: BOOL,
-    SUBSTACK: BRANCH, SUBSTACK2: BRANCH
+    SUBSTACK: BRANCH, SUBSTACK2: BRANCH,
+    ITEM: TEXT, INDEX: INTEGER, LETTER: WHOLE
 };
 
 /**

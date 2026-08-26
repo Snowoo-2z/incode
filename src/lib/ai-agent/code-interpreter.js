@@ -172,6 +172,15 @@ const parseLineCommands = text => {
             });
             break;
 
+        case 'CREATE_LIST':
+        case 'CREER_LISTE':
+            actions.push({
+                type: 'CREATE_LIST',
+                name: parts[1],
+                value: parts.slice(2)
+            });
+            break;
+
         case 'SET_POS':
         case 'SET_POSITION':
             actions.push({
@@ -273,6 +282,30 @@ const executeAction = async (action, vm, log) => {
                 existing.value = action.value;
             }
             log(`ℹ Variable "${varName}" déjà existante.`);
+        }
+        break;
+    }
+
+    case 'CREATE_LIST': {
+        const listName = action.name || action.listName;
+        if (!listName) break;
+        const stage = vm.runtime.getTargetForStage();
+        const existing = stage ? stage.lookupVariableByNameAndType(listName, 'list') : null;
+        if (!existing) {
+            const listId = generateId('list_');
+            if (stage && stage.createVariable) {
+                stage.createVariable(listId, listName, 'list', false);
+                if (Array.isArray(action.value) && stage.variables[listId]) {
+                    stage.variables[listId].value = action.value.map(String);
+                }
+                log(`✓ Liste globale "${listName}" créée (${
+                    Array.isArray(action.value) ? action.value.length : 0} élément(s)).`);
+            }
+        } else {
+            if (Array.isArray(action.value)) {
+                existing.value = action.value.map(String);
+            }
+            log(`ℹ Liste "${listName}" déjà existante.`);
         }
         break;
     }
