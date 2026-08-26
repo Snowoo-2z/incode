@@ -7,6 +7,9 @@
 import {emptySprite} from '../empty-assets.js';
 import {buildScript, findUnknownOpcodes, generateId} from './block-builder.js';
 import {applyDefaultCostume} from './sprite-costumes.js';
+import {parseDSL} from './dsl-parser.js';
+import {applyUpdate, applyDelete, applyInsert, applyReplace} from './block-editor.js';
+import {resolveAddress} from './block-address.js';
 
 /**
  * Horizontal/vertical layout used when the AI does not provide coordinates,
@@ -172,6 +175,15 @@ const parseLineCommands = text => {
             });
             break;
 
+        case 'CREATE_LIST':
+        case 'CREER_LISTE':
+            actions.push({
+                type: 'CREATE_LIST',
+                name: parts[1],
+                value: parts.slice(2)
+            });
+            break;
+
         case 'SET_POS':
         case 'SET_POSITION':
             actions.push({
@@ -273,6 +285,30 @@ const executeAction = async (action, vm, log) => {
                 existing.value = action.value;
             }
             log(`ℹ Variable "${varName}" déjà existante.`);
+        }
+        break;
+    }
+
+    case 'CREATE_LIST': {
+        const listName = action.name || action.listName;
+        if (!listName) break;
+        const stage = vm.runtime.getTargetForStage();
+        const existing = stage ? stage.lookupVariableByNameAndType(listName, 'list') : null;
+        if (!existing) {
+            const listId = generateId('list_');
+            if (stage && stage.createVariable) {
+                stage.createVariable(listId, listName, 'list', false);
+                if (Array.isArray(action.value) && stage.variables[listId]) {
+                    stage.variables[listId].value = action.value.map(String);
+                }
+                log(`✓ Liste globale "${listName}" créée (${
+                    Array.isArray(action.value) ? action.value.length : 0} élément(s)).`);
+            }
+        } else {
+            if (Array.isArray(action.value)) {
+                existing.value = action.value.map(String);
+            }
+            log(`ℹ Liste "${listName}" déjà existante.`);
         }
         break;
     }
@@ -413,6 +449,60 @@ const executeAction = async (action, vm, log) => {
         break;
     }
 
+    case 'UPDATE_BLOCK':
+    case 'EDIT_BLOCK': {
+        const spriteName = action.sprite || action.target;
+        const target = findTarget(vm, spriteName);
+        if (!target || !target.blocks) {
+            log(`⚠ UPDATE_BLOCK : sprite "${spriteName}" introuvable.`);
+            break;
+        }
+        applyUpdate(action, target, {vm, target}, log);
+        break;
+    }
+
+    case 'DELETE_BLOCK': {
+        const spriteName = action.sprite || action.target;
+        const target = findTarget(vm, spriteName);
+        if (!target || !target.blocks) {
+            log(`⚠ DELETE_BLOCK : sprite "${spriteName}" introuvable.`);
+            break;
+        }
+        applyDelete(action, target, log);
+        break;
+    }
+
+    case 'INSERT_BLOCKS':
+    case 'INSERT_BLOCK': {
+        const spriteName = action.sprite || action.target;
+        const target = findTarget(vm, spriteName);
+        if (!target || !target.blocks) {
+            log(`⚠ INSERT_BLOCKS : sprite "${spriteName}" introuvable.`);
+            break;
+        }
+        const unknown = findUnknownOpcodes(action.blocks || []);
+        if (unknown.length) {
+            log(`⚠ Opcode(s) inconnu(s) : ${unknown.join(', ')}.`);
+        }
+        applyInsert(action, target, {vm, target}, log);
+        break;
+    }
+
+    case 'REPLACE_BLOCK': {
+        const spriteName = action.sprite || action.target;
+        const target = findTarget(vm, spriteName);
+        if (!target || !target.blocks) {
+            log(`⚠ REPLACE_BLOCK : sprite "${spriteName}" introuvable.`);
+            break;
+        }
+        const unknown = findUnknownOpcodes(action.blocks || []);
+        if (unknown.length) {
+            log(`⚠ Opcode(s) inconnu(s) : ${unknown.join(', ')}.`);
+        }
+        applyReplace(action, target, {vm, target}, log);
+        break;
+    }
+
     default:
         log(`ℹ Type d'action non reconnu : "${type}".`);
         break;
@@ -457,7 +547,12 @@ const interpretAndExecute = async (input, vm) => {
     }
 
     if (actions.length === 0) {
-        // Try fallback to line commands DSL
+        // Try the compact indentation-based DSL (Scratch-like text).
+        actions = parseDSL(input);
+    }
+
+    if (actions.length === 0) {
+        // Try fallback to the legacy uppercase line-command DSL.
         actions = parseLineCommands(input);
     }
 
@@ -469,6 +564,24 @@ const interpretAndExecute = async (input, vm) => {
                 'Assurez-vous de fournir du JSON avec une liste "actions" ou des commandes (ex: CREATE_SPRITE, ADD_SCRIPT).'
             ]
         };
+    }
+
+    // Snapshot pass: targeted edits (UPDATE/DELETE/INSERT/REPLACE) address
+    // blocks by their POSITION in the workspace. Applying one edit shifts the
+    // positions of later blocks, so we resolve every edit address to a concrete
+    // block id UP FRONT, against the current state, before any mutation. Each
+    // edit then acts on its own stable id regardless of what earlier edits did.
+    const EDIT_TYPES = new Set([
+        'UPDATE_BLOCK', 'EDIT_BLOCK', 'DELETE_BLOCK',
+        'INSERT_BLOCKS', 'INSERT_BLOCK', 'REPLACE_BLOCK'
+    ]);
+    for (const action of actions) {
+        const t = (action.type || action.action || '').toUpperCase();
+        if (!EDIT_TYPES.has(t)) continue;
+        const target = findTarget(vm, action.sprite || action.target);
+        if (!target || !target.blocks) continue;
+        const resolved = resolveAddress(target, action.address || action.script, action.path);
+        if (resolved) action.__blockId = resolved.blockId;
     }
 
     log(`▶ Exécution de ${actions.length} action(s)...`);

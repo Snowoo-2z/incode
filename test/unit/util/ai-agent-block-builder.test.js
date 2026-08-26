@@ -160,6 +160,87 @@ describe('ai-agent block builder', () => {
         expectConsistent(blocks);
     });
 
+    test('routes dropdown menus provided as fields into their menu shadow input', () => {
+        // Regression: the cheatsheet used to instruct the AI to pass these
+        // dropdowns as `fields`, which produced a bogus field and NO menu shadow.
+        // The condition ("si <touche pressée>") was then broken and scratch-blocks
+        // refused to render the body of the enclosing `if`.
+        const context = makeContext();
+        const blocks = buildScript([
+            {
+                opcode: 'control_if',
+                inputs: {
+                    CONDITION: {opcode: 'sensing_keypressed', fields: {KEY_OPTION: 'space'}},
+                    SUBSTACK: [{opcode: 'motion_movesteps', inputs: {STEPS: 10}}]
+                }
+            }
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const key = blocks.find(b => b.opcode === 'sensing_keypressed');
+        // KEY_OPTION must be an input filled by a menu shadow, not a raw field.
+        expect(key.fields.KEY_OPTION).toBeUndefined();
+        expect(key.inputs.KEY_OPTION).toBeDefined();
+        const menu = byId[key.inputs.KEY_OPTION.block];
+        expect(menu.opcode).toBe('sensing_keyoptions');
+        expect(menu.fields.KEY_OPTION.value).toBe('space');
+
+        // The body of the if is still linked and present.
+        const ifBlock = blocks.find(b => b.opcode === 'control_if');
+        expect(byId[ifBlock.inputs.SUBSTACK.block].opcode).toBe('motion_movesteps');
+        expectConsistent(blocks);
+    });
+
+    test('routes create-clone / touching / point-towards menus given as fields', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'control_create_clone_of', fields: {CLONE_OPTION: '_myself_'}},
+            {opcode: 'sensing_touchingobject', fields: {TOUCHINGOBJECTMENU: '_edge_'}},
+            {opcode: 'motion_pointtowards', fields: {TOWARDS: '_mouse_'}}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const clone = blocks.find(b => b.opcode === 'control_create_clone_of');
+        expect(clone.fields.CLONE_OPTION).toBeUndefined();
+        expect(byId[clone.inputs.CLONE_OPTION.block].opcode).toBe('control_create_clone_of_menu');
+        expect(byId[clone.inputs.CLONE_OPTION.block].fields.CLONE_OPTION.value).toBe('_myself_');
+
+        const touching = blocks.find(b => b.opcode === 'sensing_touchingobject');
+        expect(byId[touching.inputs.TOUCHINGOBJECTMENU.block].opcode).toBe('sensing_touchingobjectmenu');
+        expect(byId[touching.inputs.TOUCHINGOBJECTMENU.block].fields.TOUCHINGOBJECTMENU.value).toBe('_edge_');
+
+        const towards = blocks.find(b => b.opcode === 'motion_pointtowards');
+        expect(byId[towards.inputs.TOWARDS.block].opcode).toBe('motion_pointtowards_menu');
+        expect(byId[towards.inputs.TOWARDS.block].fields.TOWARDS.value).toBe('_mouse_');
+        expectConsistent(blocks);
+    });
+
+    test('routes a real field mistakenly given as an input back into fields', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            // EFFECT is a field of this opcode; the AI wrongly nested it in inputs.
+            {opcode: 'looks_changeeffectby', inputs: {EFFECT: 'GHOST', CHANGE: 25}}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const effect = blocks.find(b => b.opcode === 'looks_changeeffectby');
+        expect(effect.fields.EFFECT.value).toBe('GHOST');
+        expect(effect.inputs.EFFECT).toBeUndefined();
+        // The genuine value input is still a numeric shadow.
+        expect(byId[effect.inputs.CHANGE.block].opcode).toBe('math_number');
+        expectConsistent(blocks);
+    });
+
+    test('still builds control_stop mutation when option comes from fields', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'control_stop', fields: {STOP_OPTION: 'other scripts in sprite'}}
+        ], 0, 0, context);
+        const stop = blocks.find(b => b.opcode === 'control_stop');
+        expect(stop.mutation).toEqual({tagName: 'mutation', hasnext: 'true', children: []});
+        expect(stop.fields.STOP_OPTION.value).toBe('other scripts in sprite');
+    });
+
     test('creates the referenced variables on the stage', () => {
         const context = makeContext();
         buildScript([
@@ -171,6 +252,105 @@ describe('ai-agent block builder', () => {
         expect(names).toContain('score1');
         // The same variable must be reused, not duplicated.
         expect(names.filter(n => n === 'score1')).toHaveLength(1);
+    });
+
+    test('builds list blocks with a real list-type variable field', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'data_addtolist', inputs: {ITEM: 'pomme'}, list: 'courses'},
+            {opcode: 'data_insertatlist', inputs: {ITEM: 'banane', INDEX: 1}, fields: {LIST: 'courses'}},
+            {opcode: 'data_deleteoflist', inputs: {INDEX: 2}, list: 'courses'}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const add = blocks.find(b => b.opcode === 'data_addtolist');
+        expect(add.fields.LIST.value).toBe('courses');
+        expect(add.fields.LIST.variableType).toBe('list');
+        expect(add.fields.LIST.id).toBeDefined();
+        // ITEM is a text shadow, INDEX is an integer shadow.
+        expect(byId[add.inputs.ITEM.block].opcode).toBe('text');
+        const del = blocks.find(b => b.opcode === 'data_deleteoflist');
+        expect(byId[del.inputs.INDEX.block].opcode).toBe('math_integer');
+
+        // The same list is reused across the three blocks, created once on stage.
+        const listVars = Object.values(context.stage.variables).filter(v => v.type === 'list');
+        expect(listVars).toHaveLength(1);
+        expect(listVars[0].name).toBe('courses');
+    });
+
+    test('nests a list reporter inside a condition and a value slot', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {
+                opcode: 'control_if',
+                inputs: {
+                    CONDITION: {opcode: 'data_listcontainsitem', inputs: {ITEM: 'pomme'}, list: 'courses'},
+                    SUBSTACK: [
+                        {opcode: 'looks_say', inputs: {MESSAGE: {opcode: 'data_itemoflist', inputs: {INDEX: 1}, list: 'courses'}}}
+                    ]
+                }
+            }
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const ifBlock = blocks.find(b => b.opcode === 'control_if');
+        const cond = byId[ifBlock.inputs.CONDITION.block];
+        expect(cond.opcode).toBe('data_listcontainsitem');
+        expect(cond.fields.LIST.variableType).toBe('list');
+
+        const say = blocks.find(b => b.opcode === 'looks_say');
+        const reporter = byId[say.inputs.MESSAGE.block];
+        expect(reporter.opcode).toBe('data_itemoflist');
+        expectConsistent(blocks);
+    });
+
+    test('builds pen extension blocks with the right shadows and menus', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'pen_clear'},
+            {opcode: 'pen_penDown'},
+            {opcode: 'pen_setPenColorToColor', inputs: {COLOR: '#ff0000'}},
+            {opcode: 'pen_setPenSizeTo', inputs: {SIZE: 5}},
+            {opcode: 'pen_changePenColorParamBy', inputs: {COLOR_PARAM: 'brightness', VALUE: 10}},
+            {opcode: 'pen_stamp'}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        // Command blocks with no args stay empty (no bogus inputs/fields).
+        const clear = blocks.find(b => b.opcode === 'pen_clear');
+        expect(Object.keys(clear.inputs)).toHaveLength(0);
+        expect(Object.keys(clear.fields)).toHaveLength(0);
+
+        // "set pen color to" uses a colour_picker shadow.
+        const color = blocks.find(b => b.opcode === 'pen_setPenColorToColor');
+        expect(byId[color.inputs.COLOR.block].opcode).toBe('colour_picker');
+        expect(byId[color.inputs.COLOR.block].fields.COLOUR.value).toBe('#ff0000');
+
+        // "set pen size to" uses a numeric shadow.
+        const size = blocks.find(b => b.opcode === 'pen_setPenSizeTo');
+        expect(byId[size.inputs.SIZE.block].opcode).toBe('math_number');
+
+        // The colour-parameter dropdown becomes a pen_menu_colorParam shadow.
+        const param = blocks.find(b => b.opcode === 'pen_changePenColorParamBy');
+        const paramMenu = byId[param.inputs.COLOR_PARAM.block];
+        expect(paramMenu.opcode).toBe('pen_menu_colorParam');
+        expect(paramMenu.fields.colorParam.value).toBe('brightness');
+        expect(byId[param.inputs.VALUE.block].opcode).toBe('math_number');
+        expectConsistent(blocks);
+    });
+
+    test('routes the pen colour-parameter menu given as a field into its input', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'pen_setPenColorParamTo', fields: {COLOR_PARAM: 'saturation'}, inputs: {VALUE: 50}}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const param = blocks.find(b => b.opcode === 'pen_setPenColorParamTo');
+        expect(param.fields.COLOR_PARAM).toBeUndefined();
+        expect(byId[param.inputs.COLOR_PARAM.block].opcode).toBe('pen_menu_colorParam');
+        expect(byId[param.inputs.COLOR_PARAM.block].fields.colorParam.value).toBe('saturation');
+        expectConsistent(blocks);
     });
 
     test('gives control_stop the mutation scratch-blocks expects', () => {
