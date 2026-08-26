@@ -253,21 +253,13 @@ const buildInput = (opcode, inputName, rawValue, parentId, blocksList, context) 
 /**
  * Builds the fields of a block (dropdowns rendered directly on the block).
  * @param {object} block target block
- * @param {object} spec AI spec
+ * @param {object} givenFields field name -> value map already routed/cleaned
  * @param {object} context {vm, target}
  */
-const buildFields = (block, spec, context) => {
+const buildFields = (block, givenFields, context) => {
     const opcode = block.opcode;
-    const given = Object.assign({}, spec.fields);
 
-    // Convenient shorthands accepted from the AI, they win over the defaults.
-    if (spec.variable && !given.VARIABLE) given.VARIABLE = {variable: true, value: spec.variable};
-    if (spec.key && !given.KEY_OPTION && opcode === 'event_whenkeypressed') given.KEY_OPTION = spec.key;
-    if (spec.message && !given.BROADCAST_OPTION && opcode === 'event_whenbroadcastreceived') {
-        given.BROADCAST_OPTION = {broadcast: true, value: spec.message};
-    }
-
-    const provided = Object.assign({}, getDefaultFields(opcode), given);
+    const provided = Object.assign({}, getDefaultFields(opcode), givenFields);
 
     for (const [name, rawValue] of Object.entries(provided)) {
         const descriptor = (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) ? rawValue : null;
@@ -315,25 +307,44 @@ const buildSingleBlock = (spec, blockId, parentId, blocksList, context) => {
     });
     blocksList.push(block);
 
-    // "control_stop" needs a mutation telling scratch-blocks if it can connect below.
-    if (opcode === 'control_stop' && !block.mutation) {
-        const option = (spec.fields && plainValue(spec.fields.STOP_OPTION)) || 'all';
-        block.mutation = {
-            tagName: 'mutation',
-            hasnext: (option === 'other scripts in sprite' || option === 'other scripts in stage') ? 'true' : 'false',
-            children: []
-        };
+    // The AI (and our own cheatsheet) frequently puts a dropdown selection in
+    // `fields` when Scratch actually stores it as an `input` filled by a menu
+    // shadow block (KEY_OPTION, TOUCHINGOBJECTMENU, CLONE_OPTION, TO, ...), and
+    // vice-versa. Feeding such a value to the wrong slot produced a broken block:
+    // the condition of a "si <touche pressée>" never worked and, because the
+    // C-block held a corrupt input, scratch-blocks refused to render its body —
+    // so everything nested inside the `if` disappeared. We therefore route every
+    // provided value to the slot the opcode really declares before building.
+    const declared = getDefaultInputs(opcode);
+    const declaredFields = getDefaultFields(opcode);
+
+    const givenInputs = Object.assign({}, spec.inputs);
+    const givenFields = Object.assign({}, spec.fields);
+
+    // A value the AI placed in `fields` but that is really an input slot of this
+    // opcode is moved to the inputs (so its menu shadow block gets created).
+    for (const name of Object.keys(givenFields)) {
+        if (Object.prototype.hasOwnProperty.call(declared, name) &&
+            !Object.prototype.hasOwnProperty.call(declaredFields, name) &&
+            typeof givenInputs[name] === 'undefined') {
+            givenInputs[name] = givenFields[name];
+            delete givenFields[name];
+        }
+    }
+    // Conversely, a value placed in `inputs` but that is really a plain field of
+    // this opcode is moved to the fields (e.g. EFFECT, STOP_OPTION, STYLE...).
+    for (const name of Object.keys(givenInputs)) {
+        if (Object.prototype.hasOwnProperty.call(declaredFields, name) &&
+            !Object.prototype.hasOwnProperty.call(declared, name) &&
+            typeof givenFields[name] === 'undefined') {
+            givenFields[name] = givenInputs[name];
+            delete givenInputs[name];
+        }
     }
 
-    buildFields(block, spec, context);
-
-    // Every declared input of the opcode gets built, even if the AI omitted it,
-    // so the block always looks exactly like the one from the palette.
-    const declared = getDefaultInputs(opcode);
-    const givenInputs = Object.assign({}, spec.inputs);
-
-    // Friendly shorthands the AI (and our templates) may use.
-    const shorthands = {
+    // Friendly shorthands the AI (and our templates) may use. Each targets a
+    // dropdown/menu input slot; they only apply when nothing else was provided.
+    const inputShorthands = {
         sensing_keypressed: ['KEY_OPTION', spec.key],
         sensing_touchingobject: ['TOUCHINGOBJECTMENU', spec.target || spec.touching],
         sensing_distanceto: ['DISTANCETOMENU', spec.target],
@@ -348,16 +359,42 @@ const buildSingleBlock = (spec, blockId, parentId, blocksList, context) => {
         event_broadcast: ['BROADCAST_INPUT', spec.message],
         event_broadcastandwait: ['BROADCAST_INPUT', spec.message]
     };
-    const shorthand = shorthands[opcode];
-    if (shorthand && typeof shorthand[1] !== 'undefined' && typeof givenInputs[shorthand[0]] === 'undefined') {
-        givenInputs[shorthand[0]] = shorthand[1];
+    const inputShorthand = inputShorthands[opcode];
+    if (inputShorthand && typeof inputShorthand[1] !== 'undefined' &&
+        typeof givenInputs[inputShorthand[0]] === 'undefined') {
+        givenInputs[inputShorthand[0]] = inputShorthand[1];
     }
 
+    // Shorthands that target a field rendered directly on the block.
+    if (spec.variable && typeof givenFields.VARIABLE === 'undefined') {
+        givenFields.VARIABLE = {variable: true, value: spec.variable};
+    }
+    if (spec.key && opcode === 'event_whenkeypressed' && typeof givenFields.KEY_OPTION === 'undefined') {
+        givenFields.KEY_OPTION = spec.key;
+    }
+    if (spec.message && opcode === 'event_whenbroadcastreceived' &&
+        typeof givenFields.BROADCAST_OPTION === 'undefined') {
+        givenFields.BROADCAST_OPTION = {broadcast: true, value: spec.message};
+    }
+
+    // "control_stop" needs a mutation telling scratch-blocks if it can connect below.
+    if (opcode === 'control_stop' && !block.mutation) {
+        const option = plainValue(givenFields.STOP_OPTION) || 'all';
+        block.mutation = {
+            tagName: 'mutation',
+            hasnext: (option === 'other scripts in sprite' || option === 'other scripts in stage') ? 'true' : 'false',
+            children: []
+        };
+    }
+
+    buildFields(block, givenFields, context);
+
+    // Every declared input of the opcode gets built, even if the AI omitted it,
+    // so the block always looks exactly like the one from the palette.
     const inputNames = new Set([...Object.keys(declared), ...Object.keys(givenInputs)]);
 
     for (const inputName of inputNames) {
-        // A value passed as a field but actually being an input, and vice-versa,
-        // is tolerated: skip names already consumed as fields.
+        // A name already consumed as a field must not also become an input.
         if (block.fields[inputName]) continue;
         const built = buildInput(opcode, inputName, givenInputs[inputName], blockId, blocksList, context);
         if (built) block.inputs[inputName] = built;

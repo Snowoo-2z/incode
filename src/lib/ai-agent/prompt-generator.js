@@ -20,7 +20,7 @@ const OPCODES_CHEATSHEET = `
 CHEATSHEET DES OPCODES SCRATCH 3.0 COURANTS :
 - Événements :
   * event_whenflagclicked : Quand drapeau vert cliqué
-  * event_whenkeypressed : inputs/fields: { KEY_OPTION: "space" | "up arrow" | "down arrow" | "z" | "s" | ... }
+  * event_whenkeypressed : fields: { KEY_OPTION: "space" | "up arrow" | "down arrow" | "z" | "s" | ... }
   * event_whenthisspriteclicked : Quand ce sprite est cliqué
   * event_broadcast : inputs: { BROADCAST_INPUT: "nom_message" }
   * event_whenbroadcastreceived : fields: { BROADCAST_OPTION: "nom_message" }
@@ -33,7 +33,7 @@ CHEATSHEET DES OPCODES SCRATCH 3.0 COURANTS :
   * motion_changeyby : inputs: { DY: 10 }
   * motion_sety : inputs: { Y: 100 }
   * motion_pointindirection : inputs: { DIRECTION: 90 }
-  * motion_pointtowards : fields: { TOWARDS: "_mouse_" | "NomSprite" }
+  * motion_pointtowards : inputs: { TOWARDS: "_mouse_" | "NomSprite" }
   * motion_ifonedgebounce : Rebondir si le bord est atteint
 
 - Apparence :
@@ -52,10 +52,13 @@ CHEATSHEET DES OPCODES SCRATCH 3.0 COURANTS :
   * control_if_else : inputs: { CONDITION: { opcode: ... }, SUBSTACK: [ ... ], SUBSTACK2: [ ... ] }
   * control_wait : inputs: { DURATION: 1 }
   * control_stop : fields: { STOP_OPTION: "all" | "this script" | "other scripts in sprite" }
+  * control_create_clone_of : inputs: { CLONE_OPTION: "_myself_" | "NomSprite" }
+  * control_start_as_clone : Quand je démarre comme clone
+  * control_delete_this_clone : Supprimer ce clone
 
 - Capteurs (Reporters & Conditions) :
-  * sensing_touchingobject : fields: { TOUCHINGOBJECTMENU: "_edge_" | "_mouse_" | "NomSprite" }
-  * sensing_keypressed : fields: { KEY_OPTION: "space" | "z" | "s" | "up arrow" | ... }
+  * sensing_touchingobject : inputs: { TOUCHINGOBJECTMENU: "_edge_" | "_mouse_" | "NomSprite" }
+  * sensing_keypressed : inputs: { KEY_OPTION: "space" | "z" | "s" | "up arrow" | ... }
   * sensing_mousex, sensing_mousey : Position souris
   * sensing_mousedown : Souris cliquée
 
@@ -150,6 +153,7 @@ RÈGLES IMPORTANTES :
 - Fournis un code complet, fonctionnel et directement exécutable.
 - N'utilise QUE les opcodes listés dans le cheatsheet ci-dessus : ce sont exactement les blocs disponibles dans la palette de Scratch. Tout autre opcode sera refusé.
 - Ne mets PAS de valeurs dans les "inputs" attendant un bloc booléen (CONDITION, OPERAND...) : mets-y un objet { "opcode": ... }.
+- Les menus déroulants (KEY_OPTION, TOUCHINGOBJECTMENU, CLONE_OPTION, TO, TOWARDS, COSTUME...) se mettent dans "inputs". L'interface accepte aussi "fields" par tolérance, mais "inputs" est le format correct.
 - Tu peux omettre les x/y d'un ADD_SCRIPT : les scripts sont alors placés automatiquement les uns sous les autres, sans se superposer.
 - N'écris pas d'explication en dehors du bloc JSON, réponds UNIQUEMENT avec le bloc \`\`\`json ... \`\`\` pour que l'interface puisse l'exécuter directement.
 `;

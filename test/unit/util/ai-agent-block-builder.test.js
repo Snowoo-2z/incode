@@ -160,6 +160,87 @@ describe('ai-agent block builder', () => {
         expectConsistent(blocks);
     });
 
+    test('routes dropdown menus provided as fields into their menu shadow input', () => {
+        // Regression: the cheatsheet used to instruct the AI to pass these
+        // dropdowns as `fields`, which produced a bogus field and NO menu shadow.
+        // The condition ("si <touche pressée>") was then broken and scratch-blocks
+        // refused to render the body of the enclosing `if`.
+        const context = makeContext();
+        const blocks = buildScript([
+            {
+                opcode: 'control_if',
+                inputs: {
+                    CONDITION: {opcode: 'sensing_keypressed', fields: {KEY_OPTION: 'space'}},
+                    SUBSTACK: [{opcode: 'motion_movesteps', inputs: {STEPS: 10}}]
+                }
+            }
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const key = blocks.find(b => b.opcode === 'sensing_keypressed');
+        // KEY_OPTION must be an input filled by a menu shadow, not a raw field.
+        expect(key.fields.KEY_OPTION).toBeUndefined();
+        expect(key.inputs.KEY_OPTION).toBeDefined();
+        const menu = byId[key.inputs.KEY_OPTION.block];
+        expect(menu.opcode).toBe('sensing_keyoptions');
+        expect(menu.fields.KEY_OPTION.value).toBe('space');
+
+        // The body of the if is still linked and present.
+        const ifBlock = blocks.find(b => b.opcode === 'control_if');
+        expect(byId[ifBlock.inputs.SUBSTACK.block].opcode).toBe('motion_movesteps');
+        expectConsistent(blocks);
+    });
+
+    test('routes create-clone / touching / point-towards menus given as fields', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'control_create_clone_of', fields: {CLONE_OPTION: '_myself_'}},
+            {opcode: 'sensing_touchingobject', fields: {TOUCHINGOBJECTMENU: '_edge_'}},
+            {opcode: 'motion_pointtowards', fields: {TOWARDS: '_mouse_'}}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const clone = blocks.find(b => b.opcode === 'control_create_clone_of');
+        expect(clone.fields.CLONE_OPTION).toBeUndefined();
+        expect(byId[clone.inputs.CLONE_OPTION.block].opcode).toBe('control_create_clone_of_menu');
+        expect(byId[clone.inputs.CLONE_OPTION.block].fields.CLONE_OPTION.value).toBe('_myself_');
+
+        const touching = blocks.find(b => b.opcode === 'sensing_touchingobject');
+        expect(byId[touching.inputs.TOUCHINGOBJECTMENU.block].opcode).toBe('sensing_touchingobjectmenu');
+        expect(byId[touching.inputs.TOUCHINGOBJECTMENU.block].fields.TOUCHINGOBJECTMENU.value).toBe('_edge_');
+
+        const towards = blocks.find(b => b.opcode === 'motion_pointtowards');
+        expect(byId[towards.inputs.TOWARDS.block].opcode).toBe('motion_pointtowards_menu');
+        expect(byId[towards.inputs.TOWARDS.block].fields.TOWARDS.value).toBe('_mouse_');
+        expectConsistent(blocks);
+    });
+
+    test('routes a real field mistakenly given as an input back into fields', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            // EFFECT is a field of this opcode; the AI wrongly nested it in inputs.
+            {opcode: 'looks_changeeffectby', inputs: {EFFECT: 'GHOST', CHANGE: 25}}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const effect = blocks.find(b => b.opcode === 'looks_changeeffectby');
+        expect(effect.fields.EFFECT.value).toBe('GHOST');
+        expect(effect.inputs.EFFECT).toBeUndefined();
+        // The genuine value input is still a numeric shadow.
+        expect(byId[effect.inputs.CHANGE.block].opcode).toBe('math_number');
+        expectConsistent(blocks);
+    });
+
+    test('still builds control_stop mutation when option comes from fields', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'control_stop', fields: {STOP_OPTION: 'other scripts in sprite'}}
+        ], 0, 0, context);
+        const stop = blocks.find(b => b.opcode === 'control_stop');
+        expect(stop.mutation).toEqual({tagName: 'mutation', hasnext: 'true', children: []});
+        expect(stop.fields.STOP_OPTION.value).toBe('other scripts in sprite');
+    });
+
     test('creates the referenced variables on the stage', () => {
         const context = makeContext();
         buildScript([
