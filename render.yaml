@@ -1,0 +1,38 @@
+# Render Blueprint for TurboWarp/scratch-gui on the free tier.
+#
+# This deploys the repo as a Render STATIC SITE (runtime: static), which is the
+# free option for this repository. The build command:
+#   1. installs dependencies (git dependencies are fetched over HTTPS by npm)
+#   2. generates the micro:bit firmware asset required by the build
+#   3. builds the playground into ./build
+#
+# To deploy:
+#   - push this branch to your GitHub repo,
+#   - on Render: New -> Blueprint -> pick this repo,
+#   - choose the branch that contains this file,
+#   - Render will read this render.yaml and create the static site.
+#
+# If the build still exceeds the free build memory, see RENDER_DEPLOY.md
+# section "Si le build dépasse la mémoire du plan gratuit".
+services:
+  - type: web
+    runtime: static
+    name: scratch-gui-turbowarp
+    # No plan here: static sites are free by default. Do not set plan: free for
+    # static sites; Render's free static hosting needs no paid compute instance.
+    buildCommand: |
+      npm ci --no-optional --ignore-scripts
+      node scripts/prepublish.mjs
+      npm run build:render:lowmem
+    staticPublishPath: build
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: CHROMEDRIVER_SKIP_DOWNLOAD
+        value: "1"
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "1"
+      - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+        value: "1"
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"

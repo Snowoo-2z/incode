@@ -14,6 +14,7 @@ import {
     projectError
 } from '../reducers/project-state';
 import log from './log';
+import AIAgent from './ai-agent/index.js';
 
 /**
  * List of fonts that could be used by security prompts.
@@ -40,6 +41,7 @@ const vmManagerHOC = function (WrappedComponent) {
         componentDidMount () {
             if (!this.props.vm.initialized) {
                 window.vm = this.props.vm;
+                AIAgent.setVM(this.props.vm);
                 try {
                     this.audioEngine = new AudioEngine();
                     this.props.vm.attachAudioEngine(this.audioEngine);

@@ -1,5 +1,10 @@
 scratch-gui modified for use in [TurboWarp](https://turbowarp.org/)
 
+## Deploying to Render (free plan)
+
+See [RENDER_DEPLOY.md](./RENDER_DEPLOY.md) for the step-by-step French tutorial.
+A ready-to-use [`render.yaml`](./render.yaml) is included.
+
 ## Setup
 
 See https://docs.turbowarp.org/development/getting-started to setup the complete TurboWarp environment.
