@@ -183,7 +183,24 @@ const BLOCK_SCHEMA = {
     data_lengthoflist: {fields: {LIST}},
     data_listcontainsitem: {inputs: {ITEM: TEXT}, fields: {LIST}},
     data_showlist: {fields: {LIST}},
-    data_hidelist: {fields: {LIST}}
+    data_hidelist: {fields: {LIST}},
+
+    /* ----------------------------------------------------- Extension: Pen (Stylo) */
+    // Requires the "pen" extension; it is loaded automatically by
+    // vm.shareBlocksToTarget() because these opcodes are prefixed with "pen_".
+    pen_clear: {},
+    pen_stamp: {},
+    pen_penDown: {},
+    pen_penUp: {},
+    pen_setPenColorToColor: {inputs: {COLOR: {shadow: 'colour_picker', field: 'COLOUR'}}},
+    pen_changePenColorParamBy: {
+        inputs: {COLOR_PARAM: menu('pen_menu_colorParam', 'colorParam', 'color'), VALUE: NUM}
+    },
+    pen_setPenColorParamTo: {
+        inputs: {COLOR_PARAM: menu('pen_menu_colorParam', 'colorParam', 'color'), VALUE: NUM}
+    },
+    pen_changePenSizeBy: {inputs: {SIZE: NUM}},
+    pen_setPenSizeTo: {inputs: {SIZE: NUM}}
 };
 
 /**

@@ -229,6 +229,26 @@ const formatBlockToText = (block, blocksMap, indent = 0) => {
     case 'data_hidevariable':
         return `${spaces}cacher la variable [${getFieldValue('VARIABLE') ?? ''}]`;
 
+    // Pen (extension Stylo)
+    case 'pen_clear':
+        return `${spaces}effacer tout`;
+    case 'pen_stamp':
+        return `${spaces}estampiller`;
+    case 'pen_penDown':
+        return `${spaces}stylo en position d'écriture`;
+    case 'pen_penUp':
+        return `${spaces}relever le stylo`;
+    case 'pen_setPenColorToColor':
+        return `${spaces}mettre la couleur du stylo à ${getInputValue('COLOR') ?? ''}`;
+    case 'pen_changePenColorParamBy':
+        return `${spaces}ajouter ${getInputValue('VALUE') ?? 10} à [${getInputValue('COLOR_PARAM') ?? 'color'}] du stylo`;
+    case 'pen_setPenColorParamTo':
+        return `${spaces}mettre [${getInputValue('COLOR_PARAM') ?? 'color'}] du stylo à ${getInputValue('VALUE') ?? 50}`;
+    case 'pen_changePenSizeBy':
+        return `${spaces}ajouter ${getInputValue('SIZE') ?? 1} à la taille du stylo`;
+    case 'pen_setPenSizeTo':
+        return `${spaces}mettre la taille du stylo à ${getInputValue('SIZE') ?? 1}`;
+
     default:
         return `${spaces}[${opcode}]`;
     }

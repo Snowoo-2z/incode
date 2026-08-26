@@ -90,6 +90,17 @@ CHEATSHEET DES OPCODES SCRATCH 3.0 COURANTS :
   * data_lengthoflist : fields: { LIST: "nom_liste" } (Reporter)
   * data_listcontainsitem : inputs: { ITEM: "valeur" }, fields: { LIST: "nom_liste" } (Condition)
   * data_showlist, data_hidelist : fields: { LIST: "nom_liste" }
+
+- Extension Stylo (Pen) — l'extension est chargée automatiquement dès qu'un bloc pen_ est utilisé :
+  * pen_clear : Effacer tout
+  * pen_stamp : Estampiller (tampon du costume)
+  * pen_penDown : Stylo en position d'écriture
+  * pen_penUp : Relever le stylo
+  * pen_setPenColorToColor : inputs: { COLOR: "#ff0000" } (couleur hexadécimale)
+  * pen_changePenSizeBy : inputs: { SIZE: 1 }
+  * pen_setPenSizeTo : inputs: { SIZE: 5 }
+  * pen_changePenColorParamBy : inputs: { COLOR_PARAM: "color" | "saturation" | "brightness" | "transparency", VALUE: 10 }
+  * pen_setPenColorParamTo : inputs: { COLOR_PARAM: "color" | "saturation" | "brightness" | "transparency", VALUE: 50 }
 `;
 
 /**

@@ -304,6 +304,55 @@ describe('ai-agent block builder', () => {
         expectConsistent(blocks);
     });
 
+    test('builds pen extension blocks with the right shadows and menus', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'pen_clear'},
+            {opcode: 'pen_penDown'},
+            {opcode: 'pen_setPenColorToColor', inputs: {COLOR: '#ff0000'}},
+            {opcode: 'pen_setPenSizeTo', inputs: {SIZE: 5}},
+            {opcode: 'pen_changePenColorParamBy', inputs: {COLOR_PARAM: 'brightness', VALUE: 10}},
+            {opcode: 'pen_stamp'}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        // Command blocks with no args stay empty (no bogus inputs/fields).
+        const clear = blocks.find(b => b.opcode === 'pen_clear');
+        expect(Object.keys(clear.inputs)).toHaveLength(0);
+        expect(Object.keys(clear.fields)).toHaveLength(0);
+
+        // "set pen color to" uses a colour_picker shadow.
+        const color = blocks.find(b => b.opcode === 'pen_setPenColorToColor');
+        expect(byId[color.inputs.COLOR.block].opcode).toBe('colour_picker');
+        expect(byId[color.inputs.COLOR.block].fields.COLOUR.value).toBe('#ff0000');
+
+        // "set pen size to" uses a numeric shadow.
+        const size = blocks.find(b => b.opcode === 'pen_setPenSizeTo');
+        expect(byId[size.inputs.SIZE.block].opcode).toBe('math_number');
+
+        // The colour-parameter dropdown becomes a pen_menu_colorParam shadow.
+        const param = blocks.find(b => b.opcode === 'pen_changePenColorParamBy');
+        const paramMenu = byId[param.inputs.COLOR_PARAM.block];
+        expect(paramMenu.opcode).toBe('pen_menu_colorParam');
+        expect(paramMenu.fields.colorParam.value).toBe('brightness');
+        expect(byId[param.inputs.VALUE.block].opcode).toBe('math_number');
+        expectConsistent(blocks);
+    });
+
+    test('routes the pen colour-parameter menu given as a field into its input', () => {
+        const context = makeContext();
+        const blocks = buildScript([
+            {opcode: 'pen_setPenColorParamTo', fields: {COLOR_PARAM: 'saturation'}, inputs: {VALUE: 50}}
+        ], 0, 0, context);
+        const byId = Object.fromEntries(blocks.map(b => [b.id, b]));
+
+        const param = blocks.find(b => b.opcode === 'pen_setPenColorParamTo');
+        expect(param.fields.COLOR_PARAM).toBeUndefined();
+        expect(byId[param.inputs.COLOR_PARAM.block].opcode).toBe('pen_menu_colorParam');
+        expect(byId[param.inputs.COLOR_PARAM.block].fields.colorParam.value).toBe('saturation');
+        expectConsistent(blocks);
+    });
+
     test('gives control_stop the mutation scratch-blocks expects', () => {
         const context = makeContext();
         const blocks = buildScript([{opcode: 'control_stop', fields: {STOP_OPTION: 'all'}}], 0, 0, context);

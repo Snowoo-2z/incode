@@ -88,13 +88,43 @@ Détails d'implémentation :
   avec valeur initiale optionnelle (tableau d'éléments).
 - Cheatsheet du prompt mis à jour avec la section Listes.
 
+## Extension Stylo (Pen) — ajoutée
+
+Les 9 blocs de l'extension **Stylo** sont désormais supportés :
+
+`pen_clear`, `pen_stamp`, `pen_penDown`, `pen_penUp`,
+`pen_setPenColorToColor`, `pen_changePenColorParamBy`,
+`pen_setPenColorParamTo`, `pen_changePenSizeBy`, `pen_setPenSizeTo`.
+
+Détails vérifiés contre `scratch-vm/src/extensions/scratch3_pen/index.js` :
+
+- `pen_setPenColorToColor` → input `COLOR` avec shadow `colour_picker`
+  (champ `COLOUR`).
+- `pen_changePenColorParamBy` / `pen_setPenColorParamTo` → input `COLOR_PARAM`
+  rempli par le bloc-menu `pen_menu_colorParam` (champ **`colorParam`** en
+  minuscules, valeurs : `color`, `saturation`, `brightness`, `transparency`)
+  + input `VALUE` numérique.
+- `pen_changePenSizeBy` / `pen_setPenSizeTo` → input `SIZE` numérique.
+- Les blocs commande sans argument (`clear`, `stamp`, `penDown`, `penUp`)
+  n'ont ni input ni field.
+
+**Chargement automatique de l'extension** : `vm.shareBlocksToTarget()` détecte
+le préfixe `pen_` via `getExtensionIdForOpcode`, et comme `pen` n'est pas une
+extension « core », il appelle `_loadExtensions(['pen'])` avant de créer les
+blocs. L'extension est donc chargée toute seule, exactement comme lorsqu'on
+fait glisser un bloc stylo depuis un autre sprite. Aucun code spécifique n'est
+nécessaire dans l'interpréteur.
+
+Le résumé de projet (`sprite-reader.js`) rend aussi ces blocs en français.
+
 ## Limites connues (non bloquantes)
 
 - **Blocs personnalisés (My Blocks / `procedures_*`)** : non supportés. Ils
   nécessitent une mutation `proccode`/`argumentids` complexe ; hors périmètre
   de l'agent pour l'instant. Les opcodes inconnus sont signalés à l'utilisateur
   via `findUnknownOpcodes`, donc pas de bloc cassé silencieux.
-- **Extensions** (stylo, musique, traduction…) : non incluses dans le
-  catalogue.
+- **Autres extensions** (musique, traduction, texte-vers-parole…) : non encore
+  incluses dans le catalogue. L'extension **Stylo** est supportée (voir plus
+  haut).
 - `sound_seteffectto`/`sound_changeeffectby` : la valeur par défaut du field
   `EFFECT` est `PITCH` (l'autre option étant `PAN`), conforme au VM.
