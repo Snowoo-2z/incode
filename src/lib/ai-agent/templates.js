@@ -11,15 +11,14 @@ const PONG_GAME_TEMPLATE = {
         { type: 'CREATE_VAR', name: 'score2', value: 0 },
 
         // 2. Create Paddle1 (left paddle, controls: W / S)
-        { type: 'CREATE_SPRITE', name: 'Paddle1', x: -200, y: 0 },
+        { type: 'CREATE_SPRITE', name: 'Paddle1', x: -200, y: 0, shape: 'paddle', color: '#4C97FF' },
         { type: 'CLEAR_BLOCKS', sprite: 'Paddle1' },
         {
             type: 'ADD_SCRIPT',
             sprite: 'Paddle1',
-            x: 50,
-            y: 50,
             blocks: [
                 { opcode: 'event_whenflagclicked' },
+                { opcode: 'motion_setrotationstyle', fields: { STYLE: "don't rotate" } },
                 { opcode: 'motion_gotoxy', inputs: { X: -200, Y: 0 } },
                 {
                     opcode: 'control_forever',
@@ -50,15 +49,14 @@ const PONG_GAME_TEMPLATE = {
         },
 
         // 3. Create Paddle2 (right paddle, controls: Up arrow / Down arrow)
-        { type: 'CREATE_SPRITE', name: 'Paddle2', x: 200, y: 0 },
+        { type: 'CREATE_SPRITE', name: 'Paddle2', x: 200, y: 0, shape: 'paddle', color: '#FF6680' },
         { type: 'CLEAR_BLOCKS', sprite: 'Paddle2' },
         {
             type: 'ADD_SCRIPT',
             sprite: 'Paddle2',
-            x: 50,
-            y: 50,
             blocks: [
                 { opcode: 'event_whenflagclicked' },
+                { opcode: 'motion_setrotationstyle', fields: { STYLE: "don't rotate" } },
                 { opcode: 'motion_gotoxy', inputs: { X: 200, Y: 0 } },
                 {
                     opcode: 'control_forever',
@@ -89,17 +87,18 @@ const PONG_GAME_TEMPLATE = {
         },
 
         // 4. Create Ball
-        { type: 'CREATE_SPRITE', name: 'Ball', x: 0, y: 0 },
+        { type: 'CREATE_SPRITE', name: 'Ball', x: 0, y: 0, shape: 'ball', color: '#FFAB19' },
         { type: 'CLEAR_BLOCKS', sprite: 'Ball' },
         {
             type: 'ADD_SCRIPT',
             sprite: 'Ball',
-            x: 50,
-            y: 50,
             blocks: [
                 { opcode: 'event_whenflagclicked' },
                 { opcode: 'data_setvariableto', variable: 'score1', inputs: { VALUE: 0 } },
                 { opcode: 'data_setvariableto', variable: 'score2', inputs: { VALUE: 0 } },
+                { opcode: 'data_showvariable', variable: 'score1' },
+                { opcode: 'data_showvariable', variable: 'score2' },
+                { opcode: 'motion_setrotationstyle', fields: { STYLE: "don't rotate" } },
                 { opcode: 'motion_gotoxy', inputs: { X: 0, Y: 0 } },
                 { opcode: 'motion_pointindirection', inputs: { DIRECTION: 45 } },
                 {
@@ -108,13 +107,14 @@ const PONG_GAME_TEMPLATE = {
                         SUBSTACK: [
                             { opcode: 'motion_movesteps', inputs: { STEPS: 7 } },
                             { opcode: 'motion_ifonedgebounce' },
+                            // Bounce off the paddles.
                             {
                                 opcode: 'control_if',
                                 inputs: {
                                     CONDITION: { opcode: 'sensing_touchingobject', target: 'Paddle1' },
                                     SUBSTACK: [
                                         { opcode: 'motion_pointindirection', inputs: { DIRECTION: 60 } },
-                                        { opcode: 'motion_movesteps', inputs: { STEPS: 10 } }
+                                        { opcode: 'motion_movesteps', inputs: { STEPS: 12 } }
                                     ]
                                 }
                             },
@@ -124,7 +124,39 @@ const PONG_GAME_TEMPLATE = {
                                     CONDITION: { opcode: 'sensing_touchingobject', target: 'Paddle2' },
                                     SUBSTACK: [
                                         { opcode: 'motion_pointindirection', inputs: { DIRECTION: -60 } },
-                                        { opcode: 'motion_movesteps', inputs: { STEPS: 10 } }
+                                        { opcode: 'motion_movesteps', inputs: { STEPS: 12 } }
+                                    ]
+                                }
+                            },
+                            // Player 2 scores when the ball passes the left edge.
+                            {
+                                opcode: 'control_if',
+                                inputs: {
+                                    CONDITION: {
+                                        opcode: 'operator_lt',
+                                        inputs: { OPERAND1: { opcode: 'motion_xposition' }, OPERAND2: -230 }
+                                    },
+                                    SUBSTACK: [
+                                        { opcode: 'data_changevariableby', variable: 'score2', inputs: { VALUE: 1 } },
+                                        { opcode: 'motion_gotoxy', inputs: { X: 0, Y: 0 } },
+                                        { opcode: 'motion_pointindirection', inputs: { DIRECTION: 45 } },
+                                        { opcode: 'control_wait', inputs: { DURATION: 0.5 } }
+                                    ]
+                                }
+                            },
+                            // Player 1 scores when the ball passes the right edge.
+                            {
+                                opcode: 'control_if',
+                                inputs: {
+                                    CONDITION: {
+                                        opcode: 'operator_gt',
+                                        inputs: { OPERAND1: { opcode: 'motion_xposition' }, OPERAND2: 230 }
+                                    },
+                                    SUBSTACK: [
+                                        { opcode: 'data_changevariableby', variable: 'score1', inputs: { VALUE: 1 } },
+                                        { opcode: 'motion_gotoxy', inputs: { X: 0, Y: 0 } },
+                                        { opcode: 'motion_pointindirection', inputs: { DIRECTION: -135 } },
+                                        { opcode: 'control_wait', inputs: { DURATION: 0.5 } }
                                     ]
                                 }
                             }
@@ -141,7 +173,7 @@ const CLICKER_GAME_TEMPLATE = {
     description: 'Crée un sprite cliquable avec animation et compteur de points.',
     actions: [
         { type: 'CREATE_VAR', name: 'points', value: 0 },
-        { type: 'CREATE_SPRITE', name: 'Bouton', x: 0, y: 0 },
+        { type: 'CREATE_SPRITE', name: 'Bouton', x: 0, y: 0, shape: 'circle', color: '#9966FF' },
         { type: 'CLEAR_BLOCKS', sprite: 'Bouton' },
         {
             type: 'ADD_SCRIPT',

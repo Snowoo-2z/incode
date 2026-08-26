@@ -4,6 +4,14 @@
  */
 
 import {formatProjectSummary} from './sprite-reader.js';
+import {BLOCK_SCHEMA} from './block-schema.js';
+
+/**
+ * The exhaustive list of opcodes the builder is able to create correctly.
+ * Generated from the schema so the prompt can never drift from the code.
+ * @returns {string} formatted list
+ */
+const listSupportedOpcodes = () => Object.keys(BLOCK_SCHEMA).sort().join(', ');
 
 /**
  * Cheatsheet of the most common and useful Scratch opcodes for the AI
@@ -105,6 +113,9 @@ Chaque action peut être de type :
 
 ${OPCODES_CHEATSHEET}
 
+LISTE EXHAUSTIVE DES OPCODES AUTORISÉS (aucun autre ne sera accepté) :
+${listSupportedOpcodes()}
+
 EXEMPLE TYPE D'ACTION JSON ATTENDU :
 \`\`\`json
 {
@@ -137,6 +148,9 @@ EXEMPLE TYPE D'ACTION JSON ATTENDU :
 
 RÈGLES IMPORTANTES :
 - Fournis un code complet, fonctionnel et directement exécutable.
+- N'utilise QUE les opcodes listés dans le cheatsheet ci-dessus : ce sont exactement les blocs disponibles dans la palette de Scratch. Tout autre opcode sera refusé.
+- Ne mets PAS de valeurs dans les "inputs" attendant un bloc booléen (CONDITION, OPERAND...) : mets-y un objet { "opcode": ... }.
+- Tu peux omettre les x/y d'un ADD_SCRIPT : les scripts sont alors placés automatiquement les uns sous les autres, sans se superposer.
 - N'écris pas d'explication en dehors du bloc JSON, réponds UNIQUEMENT avec le bloc \`\`\`json ... \`\`\` pour que l'interface puisse l'exécuter directement.
 `;
 };
