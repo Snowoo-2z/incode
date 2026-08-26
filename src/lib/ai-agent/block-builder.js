@@ -1,182 +1,378 @@
 /**
- * @fileoverview Block Builder for Scratch VM.
- * Converts structured block specifications into valid Scratch 3.0 blocks
- * and links them with variables, inputs, branches, and coordinates.
+ * @fileoverview Block Builder for the Scratch VM.
+ *
+ * IMPORTANT — why this file was rewritten:
+ * `vm.shareBlocksToTarget()` does NOT accept the sb3 *serialized* block format
+ * (the compact one with `inputs: {X: [1, [4, "10"]]}`). It only deep-clones the
+ * given array, renumbers the ids and calls `target.blocks.createBlock()` on each
+ * item, which expects the *hydrated* runtime format:
+ *
+ *   {
+ *     id, opcode, next, parent, topLevel, shadow, x, y,
+ *     inputs: {X: {name: 'X', block: '<id>', shadow: '<id>'}},
+ *     fields: {VARIABLE: {name: 'VARIABLE', value: 'score', id: '<varId>'}}
+ *   }
+ *
+ * Feeding the serialized format produced blocks that were dropped in the
+ * workspace with empty / broken slots and no shadow blocks: this is what made
+ * the agent's block spawning unusable.
+ *
+ * This builder now creates, for every editable slot, the very same shadow block
+ * the palette on the left would have inserted (math_number, text, math_angle,
+ * sensing_keyoptions dropdown, ...) as described in `block-schema.js`.
  */
 
-// Unique ID generator
+import {
+    getInputSchema,
+    getDefaultFields,
+    getDefaultInputs,
+    isKnownOpcode
+} from './block-schema.js';
+
+/** Unique ID generator */
 const generateId = (prefix = 'block_') =>
     prefix + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).substring(4);
 
-/**
- * Normalizes input values into Scratch VM format
- * @param {any} val Raw input value or child block spec
- * @param {Array} blocksList Accumulator for created blocks
- * @param {string} parentId ID of the parent block
- * @param {object} context Target and VM context for variable lookup
- */
-const processInputValue = (inputKey, val, blocksList, parentId, context) => {
-    // If it's a child block (reporter / condition)
-    if (val && typeof val === 'object' && !Array.isArray(val) && val.opcode) {
-        const childBlockId = generateId('rep_');
-        const childBlock = buildSingleBlock(val, childBlockId, parentId, blocksList, context);
-        // Scratch input reporter format: [3, childBlockId, [4, ""]] or [2, childBlockId]
-        return [2, childBlockId];
-    }
-
-    // Number or string primitive
-    if (typeof val === 'number') {
-        return [1, [4, String(val)]];
-    }
-    if (typeof val === 'boolean') {
-        return [1, [4, val ? 'true' : 'false']];
-    }
-    if (typeof val === 'string') {
-        return [1, [4, val]];
-    }
-
-    // Already in Scratch format [1, [4, "..."]]
-    if (Array.isArray(val)) {
-        return val;
-    }
-
-    return [1, [4, String(val ?? '')]];
-};
+const SCALAR_TYPE = '';
+const BROADCAST_TYPE = 'broadcast_msg';
 
 /**
- * Builds a single block and appends it to blocksList
+ * Creates a hydrated block object.
+ * @param {object} params block description
+ * @returns {object} VM block
  */
-const buildSingleBlock = (spec, blockId, parentId, blocksList, context) => {
-    const opcode = spec.opcode;
-    const inputs = {};
-    const fields = {};
+const makeBlock = ({id, opcode, parent = null, shadow = false, mutation = null}) => ({
+    id,
+    opcode,
+    inputs: {},
+    fields: {},
+    next: null,
+    topLevel: false,
+    parent,
+    shadow,
+    mutation
+});
 
-    // 1. Process inputs
-    if (spec.inputs) {
-        for (const [k, v] of Object.entries(spec.inputs)) {
-            if (k === 'SUBSTACK' || k === 'SUBSTACK2') {
-                // Branch input (for control_forever, control_if, etc.)
-                if (Array.isArray(v) && v.length > 0) {
-                    const branchHeadId = buildBlockStack(v, blockId, blocksList, context);
-                    if (branchHeadId) {
-                        inputs[k] = [2, branchHeadId];
-                    }
-                }
-            } else {
-                inputs[k] = processInputValue(k, v, blocksList, blockId, context);
-            }
-        }
-    }
-
-    // 2. Process fields (e.g. VARIABLE, KEY_OPTION, STOP_OPTION, etc.)
-    if (spec.fields) {
-        for (const [k, v] of Object.entries(spec.fields)) {
-            if (k === 'VARIABLE') {
-                const varName = Array.isArray(v) ? v[0] : String(v);
-                // Lookup or create variable in context
-                const varId = resolveOrCreateVariable(varName, context);
-                fields[k] = [varName, varId];
-            } else if (k === 'KEY_OPTION' || k === 'STOP_OPTION' || k === 'TOUCHINGOBJECTMENU' || k === 'BROADCAST_OPTION') {
-                const val = Array.isArray(v) ? v[0] : String(v);
-                fields[k] = [val, null];
-            } else {
-                fields[k] = Array.isArray(v) ? v : [String(v), null];
-            }
-        }
-    }
-
-    // Handle shortcut helper: if opcode is data_setvariableto / data_changevariableby and variable is in spec.variable
-    if ((opcode === 'data_setvariableto' || opcode === 'data_changevariableby' || opcode === 'data_variable') && !fields.VARIABLE) {
-        const varName = spec.variable || (spec.inputs && spec.inputs.VARIABLE) || 'score';
-        const varId = resolveOrCreateVariable(varName, context);
-        fields.VARIABLE = [varName, varId];
-    }
-
-    // Handle shortcut for keys (sensing_keypressed)
-    if (opcode === 'sensing_keypressed' && !inputs.KEY_OPTION && !fields.KEY_OPTION) {
-        const key = spec.key || 'space';
-        // Scratch uses shadow block for key_options
-        const shadowId = generateId('key_');
-        blocksList.push({
-            id: shadowId,
-            opcode: 'sensing_keyoptions',
-            inputs: {},
-            fields: { KEY_OPTION: [key, null] },
-            next: null,
-            topLevel: false,
-            parent: blockId,
-            shadow: true
-        });
-        inputs.KEY_OPTION = [1, shadowId];
-    }
-
-    // Handle shortcut for touching object menu
-    if (opcode === 'sensing_touchingobject' && !inputs.TOUCHINGOBJECTMENU && !fields.TOUCHINGOBJECTMENU) {
-        const menuVal = spec.target || spec.touching || '_edge_';
-        const shadowId = generateId('touch_');
-        blocksList.push({
-            id: shadowId,
-            opcode: 'sensing_touchingobjectmenu',
-            inputs: {},
-            fields: { TOUCHINGOBJECTMENU: [menuVal, null] },
-            next: null,
-            topLevel: false,
-            parent: blockId,
-            shadow: true
-        });
-        inputs.TOUCHINGOBJECTMENU = [1, shadowId];
-    }
-
-    const block = {
-        id: blockId,
-        opcode: opcode,
-        inputs: inputs,
-        fields: fields,
-        next: null,
-        topLevel: false,
-        parent: parentId || null,
-        shadow: !!spec.shadow,
-        mutation: spec.mutation || null
+/**
+ * Creates a shadow block (the little editable oval coming from the palette).
+ * @param {string} shadowOpcode e.g. 'math_number'
+ * @param {string} fieldName e.g. 'NUM'
+ * @param {any} value default value
+ * @param {string} parentId parent block id
+ * @param {Array} blocksList accumulator
+ * @returns {string} id of the created shadow
+ */
+const createShadow = (shadowOpcode, fieldName, value, parentId, blocksList) => {
+    const id = generateId('shadow_');
+    const block = makeBlock({id, opcode: shadowOpcode, parent: parentId, shadow: true});
+    block.fields[fieldName] = {
+        name: fieldName,
+        value: value === null || typeof value === 'undefined' ? '' : String(value)
     };
-
     blocksList.push(block);
-    return block;
+    return id;
 };
 
 /**
- * Resolves a variable ID, creating the global variable if it doesn't exist.
+ * Resolves a variable id, creating the global variable on the stage if needed.
+ * @param {string} varName variable name
+ * @param {object} context {vm, target}
+ * @returns {string} variable id
  */
 const resolveOrCreateVariable = (varName, context) => {
-    const { vm, target } = context;
+    const {vm, target} = context;
     if (!vm || !vm.runtime) return generateId('var_');
 
-    const stage = vm.runtime.getTargetForStage();
-    let existingVar = null;
+    const stage = vm.runtime.getTargetForStage ? vm.runtime.getTargetForStage() : null;
+    let existing = null;
 
-    // Check on current target
     if (target && target.lookupVariableByNameAndType) {
-        existingVar = target.lookupVariableByNameAndType(varName, '');
+        existing = target.lookupVariableByNameAndType(varName, SCALAR_TYPE);
     }
-    // Check on stage
-    if (!existingVar && stage && stage.lookupVariableByNameAndType) {
-        existingVar = stage.lookupVariableByNameAndType(varName, '');
+    if (!existing && stage && stage.lookupVariableByNameAndType) {
+        existing = stage.lookupVariableByNameAndType(varName, SCALAR_TYPE);
     }
+    if (existing) return existing.id;
 
-    if (existingVar) {
-        return existingVar.id;
-    }
-
-    // Create global variable on stage
     const newId = generateId('var_');
     if (stage && stage.createVariable) {
-        stage.createVariable(newId, varName, '', false);
+        stage.createVariable(newId, varName, SCALAR_TYPE, false);
     }
     return newId;
 };
 
 /**
- * Builds a linked sequence of blocks (a stack)
- * Returns the ID of the first block in the stack.
+ * Resolves (or creates) a broadcast message on the stage.
+ * @param {string} name message name
+ * @param {object} context {vm}
+ * @returns {string} broadcast id
+ */
+const resolveOrCreateBroadcast = (name, context) => {
+    const {vm} = context;
+    const stage = vm && vm.runtime && vm.runtime.getTargetForStage ? vm.runtime.getTargetForStage() : null;
+    if (stage && stage.lookupBroadcastMsg) {
+        const existing = stage.lookupBroadcastMsg(null, name);
+        if (existing) return existing.id;
+    }
+    const id = generateId('broadcast_');
+    if (stage && stage.createVariable) {
+        stage.createVariable(id, name, BROADCAST_TYPE, false);
+    }
+    return id;
+};
+
+/**
+ * True when the value describes a nested block ({opcode: ...}).
+ * @param {any} val candidate
+ * @returns {boolean} result
+ */
+const isBlockSpec = val =>
+    !!val && typeof val === 'object' && !Array.isArray(val) && typeof val.opcode === 'string';
+
+/**
+ * Extracts a plain value from what the AI may have written:
+ * 10 / "10" / [1, [4, "10"]] / {value: 10}
+ * @param {any} val raw value
+ * @returns {any} plain value
+ */
+const plainValue = val => {
+    if (Array.isArray(val)) {
+        // Tolerate the sb3 serialized form so old AI answers keep working.
+        let cur = val;
+        while (Array.isArray(cur)) cur = cur[cur.length - 1];
+        return cur;
+    }
+    if (val && typeof val === 'object' && 'value' in val) return val.value;
+    return val;
+};
+
+/**
+ * Default value of a dropdown when the AI provided none.
+ * Costume / backdrop / sound menus are resolved against the real assets of the
+ * target, exactly like the palette on the left does.
+ * @param {object} schema input schema
+ * @param {object} context {vm, target}
+ * @returns {string} default menu value
+ */
+const resolveMenuDefault = (schema, context) => {
+    const {target, vm} = context;
+    switch (schema.shadow) {
+    case 'looks_costume': {
+        const costumes = target && target.getCostumes ? target.getCostumes() : [];
+        return costumes.length ? costumes[0].name : 'costume1';
+    }
+    case 'looks_backdrops': {
+        const stage = vm && vm.runtime && vm.runtime.getTargetForStage ? vm.runtime.getTargetForStage() : null;
+        const backdrops = stage && stage.getCostumes ? stage.getCostumes() : [];
+        return backdrops.length ? backdrops[0].name : 'backdrop1';
+    }
+    case 'sound_sounds_menu': {
+        const sounds = target && target.getSounds ? target.getSounds() : [];
+        return sounds.length ? sounds[0].name : '';
+    }
+    default:
+        return schema.defaultValue || '';
+    }
+};
+
+/**
+ * Builds one input slot of a block, creating shadows and nested blocks.
+ * @param {string} opcode parent opcode
+ * @param {string} inputName input name
+ * @param {any} rawValue value provided by the AI (may be undefined)
+ * @param {string} parentId parent block id
+ * @param {Array} blocksList accumulator
+ * @param {object} context {vm, target}
+ * @returns {?object} hydrated input descriptor
+ */
+const buildInput = (opcode, inputName, rawValue, parentId, blocksList, context) => {
+    const schema = getInputSchema(opcode, inputName);
+
+    // --- Branch (SUBSTACK / SUBSTACK2) -------------------------------------
+    if (schema.branch) {
+        const list = Array.isArray(rawValue) ? rawValue : (rawValue ? [rawValue] : []);
+        if (!list.length) return null;
+        const headId = buildBlockStack(list, parentId, blocksList, context);
+        if (!headId) return null;
+        return {name: inputName, block: headId, shadow: null};
+    }
+
+    // --- Boolean slot (no shadow in Scratch) -------------------------------
+    if (schema.shadow === null) {
+        if (!isBlockSpec(rawValue)) return null;
+        const childId = generateId('bool_');
+        buildSingleBlock(rawValue, childId, parentId, blocksList, context);
+        return {name: inputName, block: childId, shadow: null};
+    }
+
+    // --- Dropdown menu slot (motion_goto_menu, sensing_keyoptions, ...) -----
+    if (schema.isMenu) {
+        let menuValue = plainValue(rawValue);
+        if (typeof menuValue === 'undefined' || menuValue === null || menuValue === '') {
+            menuValue = resolveMenuDefault(schema, context);
+        }
+        if (isBlockSpec(rawValue)) {
+            // A reporter dropped onto the dropdown: keep the shadow underneath.
+            const shadowId = createShadow(schema.shadow, schema.field, '', parentId, blocksList);
+            const childId = generateId('rep_');
+            buildSingleBlock(rawValue, childId, parentId, blocksList, context);
+            return {name: inputName, block: childId, shadow: shadowId};
+        }
+        const value = typeof menuValue === 'undefined' || menuValue === null ? '' : String(menuValue);
+        const shadowId = createShadow(schema.shadow, schema.field, value, parentId, blocksList);
+        // Broadcast dropdowns carry a variable id.
+        if (schema.shadow === 'event_broadcast_menu') {
+            const shadowBlock = blocksList[blocksList.length - 1];
+            const msgName = value || 'message1';
+            shadowBlock.fields[schema.field] = {
+                name: schema.field,
+                value: msgName,
+                id: resolveOrCreateBroadcast(msgName, context),
+                variableType: BROADCAST_TYPE
+            };
+        }
+        return {name: inputName, block: shadowId, shadow: shadowId};
+    }
+
+    // --- Regular value slot (number / text / angle / colour) ---------------
+    const defaultValue = schema.shadow === 'text' ? '' : 0;
+    if (isBlockSpec(rawValue)) {
+        // Reporter obscuring its shadow: both must exist, like in the editor.
+        const shadowId = createShadow(schema.shadow, schema.field, defaultValue, parentId, blocksList);
+        const childId = generateId('rep_');
+        buildSingleBlock(rawValue, childId, parentId, blocksList, context);
+        return {name: inputName, block: childId, shadow: shadowId};
+    }
+
+    const value = plainValue(rawValue);
+    const finalValue = typeof value === 'undefined' || value === null ? defaultValue : value;
+    const shadowId = createShadow(schema.shadow, schema.field, finalValue, parentId, blocksList);
+    return {name: inputName, block: shadowId, shadow: shadowId};
+};
+
+/**
+ * Builds the fields of a block (dropdowns rendered directly on the block).
+ * @param {object} block target block
+ * @param {object} spec AI spec
+ * @param {object} context {vm, target}
+ */
+const buildFields = (block, spec, context) => {
+    const opcode = block.opcode;
+    const given = Object.assign({}, spec.fields);
+
+    // Convenient shorthands accepted from the AI, they win over the defaults.
+    if (spec.variable && !given.VARIABLE) given.VARIABLE = {variable: true, value: spec.variable};
+    if (spec.key && !given.KEY_OPTION && opcode === 'event_whenkeypressed') given.KEY_OPTION = spec.key;
+    if (spec.message && !given.BROADCAST_OPTION && opcode === 'event_whenbroadcastreceived') {
+        given.BROADCAST_OPTION = {broadcast: true, value: spec.message};
+    }
+
+    const provided = Object.assign({}, getDefaultFields(opcode), given);
+
+    for (const [name, rawValue] of Object.entries(provided)) {
+        const descriptor = (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) ? rawValue : null;
+        const value = plainValue(descriptor ? descriptor.value : rawValue);
+
+        if (name === 'VARIABLE' || (descriptor && descriptor.variable)) {
+            const varName = String(value);
+            block.fields[name] = {
+                name,
+                value: varName,
+                id: resolveOrCreateVariable(varName, context),
+                variableType: SCALAR_TYPE
+            };
+        } else if (name === 'BROADCAST_OPTION' || (descriptor && descriptor.broadcast)) {
+            const msgName = String(value);
+            block.fields[name] = {
+                name,
+                value: msgName,
+                id: resolveOrCreateBroadcast(msgName, context),
+                variableType: BROADCAST_TYPE
+            };
+        } else {
+            block.fields[name] = {name, value: String(value)};
+        }
+    }
+};
+
+/**
+ * Builds a single block (plus its shadows and nested blocks).
+ * @param {object} spec {opcode, inputs, fields, ...}
+ * @param {string} blockId id to use
+ * @param {?string} parentId parent block id
+ * @param {Array} blocksList accumulator
+ * @param {object} context {vm, target}
+ * @returns {object} the created block
+ */
+const buildSingleBlock = (spec, blockId, parentId, blocksList, context) => {
+    const opcode = spec.opcode;
+    const block = makeBlock({
+        id: blockId,
+        opcode,
+        parent: parentId || null,
+        shadow: !!spec.shadow,
+        mutation: spec.mutation || null
+    });
+    blocksList.push(block);
+
+    // "control_stop" needs a mutation telling scratch-blocks if it can connect below.
+    if (opcode === 'control_stop' && !block.mutation) {
+        const option = (spec.fields && plainValue(spec.fields.STOP_OPTION)) || 'all';
+        block.mutation = {
+            tagName: 'mutation',
+            hasnext: (option === 'other scripts in sprite' || option === 'other scripts in stage') ? 'true' : 'false',
+            children: []
+        };
+    }
+
+    buildFields(block, spec, context);
+
+    // Every declared input of the opcode gets built, even if the AI omitted it,
+    // so the block always looks exactly like the one from the palette.
+    const declared = getDefaultInputs(opcode);
+    const givenInputs = Object.assign({}, spec.inputs);
+
+    // Friendly shorthands the AI (and our templates) may use.
+    const shorthands = {
+        sensing_keypressed: ['KEY_OPTION', spec.key],
+        sensing_touchingobject: ['TOUCHINGOBJECTMENU', spec.target || spec.touching],
+        sensing_distanceto: ['DISTANCETOMENU', spec.target],
+        motion_goto: ['TO', spec.target || spec.to],
+        motion_glideto: ['TO', spec.target || spec.to],
+        motion_pointtowards: ['TOWARDS', spec.target || spec.towards],
+        looks_switchcostumeto: ['COSTUME', spec.costume],
+        looks_switchbackdropto: ['BACKDROP', spec.backdrop],
+        sound_play: ['SOUND_MENU', spec.sound],
+        sound_playuntildone: ['SOUND_MENU', spec.sound],
+        control_create_clone_of: ['CLONE_OPTION', spec.target || spec.clone],
+        event_broadcast: ['BROADCAST_INPUT', spec.message],
+        event_broadcastandwait: ['BROADCAST_INPUT', spec.message]
+    };
+    const shorthand = shorthands[opcode];
+    if (shorthand && typeof shorthand[1] !== 'undefined' && typeof givenInputs[shorthand[0]] === 'undefined') {
+        givenInputs[shorthand[0]] = shorthand[1];
+    }
+
+    const inputNames = new Set([...Object.keys(declared), ...Object.keys(givenInputs)]);
+
+    for (const inputName of inputNames) {
+        // A value passed as a field but actually being an input, and vice-versa,
+        // is tolerated: skip names already consumed as fields.
+        if (block.fields[inputName]) continue;
+        const built = buildInput(opcode, inputName, givenInputs[inputName], blockId, blocksList, context);
+        if (built) block.inputs[inputName] = built;
+    }
+
+    return block;
+};
+
+/**
+ * Builds a linked stack of blocks.
+ * @param {Array<object>} specsList block specs
+ * @param {?string} parentId parent of the first block
+ * @param {Array} blocksList accumulator
+ * @param {object} context {vm, target}
+ * @returns {?string} id of the first block
  */
 const buildBlockStack = (specsList, parentId, blocksList, context) => {
     if (!Array.isArray(specsList) || specsList.length === 0) return null;
@@ -186,16 +382,15 @@ const buildBlockStack = (specsList, parentId, blocksList, context) => {
 
     for (let i = 0; i < specsList.length; i++) {
         const spec = specsList[i];
-        const blockId = spec.id || generateId('block_');
-        if (i === 0) firstId = blockId;
+        if (!spec || typeof spec.opcode !== 'string') continue;
 
-        // Current parent: if first in stack, parent is the caller's parentId; otherwise previous block
-        const currParentId = (i === 0) ? parentId : (prevBlock ? prevBlock.id : null);
+        const blockId = generateId('block_');
+        const currParentId = prevBlock ? prevBlock.id : (parentId || null);
         const block = buildSingleBlock(spec, blockId, currParentId, blocksList, context);
 
-        if (prevBlock) {
-            prevBlock.next = blockId;
-        }
+        if (prevBlock) prevBlock.next = blockId;
+        else firstId = blockId;
+
         prevBlock = block;
     }
 
@@ -203,12 +398,12 @@ const buildBlockStack = (specsList, parentId, blocksList, context) => {
 };
 
 /**
- * Builds a complete top-level script with x, y coordinates
- * @param {Array<object>} blockSpecs List of block specifications
- * @param {number} x X coordinate in the workspace
- * @param {number} y Y coordinate in the workspace
- * @param {object} context Context { vm, target }
- * @returns {Array<object>} Flat array of Scratch VM block objects ready for shareBlocksToTarget
+ * Builds a full top-level script.
+ * @param {Array<object>} blockSpecs list of block specs
+ * @param {number} x workspace x
+ * @param {number} y workspace y
+ * @param {object} context {vm, target}
+ * @returns {Array<object>} flat list of hydrated blocks for shareBlocksToTarget
  */
 const buildScript = (blockSpecs, x = 50, y = 50, context = {}) => {
     const blocksList = [];
@@ -218,13 +413,38 @@ const buildScript = (blockSpecs, x = 50, y = 50, context = {}) => {
         const topBlock = blocksList.find(b => b.id === headId);
         if (topBlock) {
             topBlock.topLevel = true;
-            topBlock.x = x;
-            topBlock.y = y;
             topBlock.parent = null;
+            topBlock.x = Math.round(x);
+            topBlock.y = Math.round(y);
         }
     }
 
     return blocksList;
+};
+
+/**
+ * Lists the opcodes of a script that are not part of the known palette.
+ * Used to warn the user instead of silently creating unusable blocks.
+ * @param {Array<object>} blockSpecs specs (possibly nested)
+ * @returns {Array<string>} unknown opcodes
+ */
+const findUnknownOpcodes = blockSpecs => {
+    const unknown = [];
+    const walk = specs => {
+        if (!Array.isArray(specs)) return;
+        for (const spec of specs) {
+            if (!spec || typeof spec.opcode !== 'string') continue;
+            if (!isKnownOpcode(spec.opcode)) unknown.push(spec.opcode);
+            if (spec.inputs) {
+                for (const value of Object.values(spec.inputs)) {
+                    if (Array.isArray(value)) walk(value);
+                    else if (isBlockSpec(value)) walk([value]);
+                }
+            }
+        }
+    };
+    walk(blockSpecs);
+    return [...new Set(unknown)];
 };
 
 export {
@@ -232,5 +452,7 @@ export {
     buildSingleBlock,
     buildBlockStack,
     resolveOrCreateVariable,
+    resolveOrCreateBroadcast,
+    findUnknownOpcodes,
     generateId
 };

@@ -5,7 +5,68 @@
  */
 
 import {emptySprite} from '../empty-assets.js';
-import {buildScript, generateId} from './block-builder.js';
+import {buildScript, findUnknownOpcodes, generateId} from './block-builder.js';
+import {applyDefaultCostume} from './sprite-costumes.js';
+
+/**
+ * Horizontal/vertical layout used when the AI does not provide coordinates,
+ * so that generated scripts never spawn stacked on top of each other.
+ */
+const SCRIPT_START_X = 60;
+const SCRIPT_START_Y = 60;
+const SCRIPT_GAP_Y = 60;
+const BLOCK_HEIGHT = 48;
+
+/**
+ * Estimates the rendered height of a script, to place the next one below it.
+ * @param {object} block a top-level VM block
+ * @param {object} blocksMap all blocks of the target
+ * @returns {number} approximate height in workspace units
+ */
+const estimateScriptHeight = (block, blocksMap) => {
+    let height = 0;
+    let curr = block;
+    while (curr) {
+        height += BLOCK_HEIGHT;
+        for (const inputName of ['SUBSTACK', 'SUBSTACK2']) {
+            const input = curr.inputs && curr.inputs[inputName];
+            const childId = input && input.block;
+            if (childId && blocksMap[childId]) {
+                height += estimateScriptHeight(blocksMap[childId], blocksMap) + BLOCK_HEIGHT / 2;
+            }
+        }
+        curr = curr.next ? blocksMap[curr.next] : null;
+    }
+    return height;
+};
+
+/**
+ * Finds a free spot in the target workspace so a new script does not overlap
+ * the existing ones (the previous implementation always used x:50 y:50, which
+ * piled every generated script on the same pixel).
+ * @param {object} target VM target
+ * @returns {{x: number, y: number}} free coordinates
+ */
+const findFreeScriptPosition = target => {
+    if (!target || !target.blocks || !target.blocks._blocks) {
+        return {x: SCRIPT_START_X, y: SCRIPT_START_Y};
+    }
+    const blocksMap = target.blocks._blocks;
+    const topBlocks = Object.keys(blocksMap)
+        .map(id => blocksMap[id])
+        .filter(b => b.topLevel && !b.shadow);
+
+    if (topBlocks.length === 0) {
+        return {x: SCRIPT_START_X, y: SCRIPT_START_Y};
+    }
+
+    let bottom = SCRIPT_START_Y;
+    for (const block of topBlocks) {
+        const blockBottom = (block.y || 0) + estimateScriptHeight(block, blocksMap);
+        if (blockBottom > bottom) bottom = blockBottom;
+    }
+    return {x: SCRIPT_START_X, y: Math.round(bottom + SCRIPT_GAP_Y)};
+};
 
 /**
  * Finds a target sprite or stage by name or ID
@@ -154,8 +215,15 @@ const executeAction = async (action, vm, log) => {
             if (action.y !== undefined) emptyItem.scratchY = Number(action.y);
 
             await vm.addSprite(JSON.stringify(emptyItem));
-            log(`✓ Sprite "${spriteName}" créé avec succès.`);
             target = findTarget(vm, spriteName);
+            // emptySprite() has a blank costume: give the sprite a visible
+            // shape, otherwise it is invisible on the stage.
+            try {
+                await applyDefaultCostume(vm, target, action.shape, action.color);
+            } catch (e) {
+                log(`⚠ Costume par défaut non appliqué à "${spriteName}" : ${e.message}`);
+            }
+            log(`✓ Sprite "${spriteName}" créé avec succès.`);
         } else {
             log(`ℹ Le sprite "${spriteName}" existe déjà.`);
         }
@@ -246,11 +314,15 @@ const executeAction = async (action, vm, log) => {
         const spriteName = action.sprite || action.name;
         const target = findTarget(vm, spriteName);
         if (target && target.blocks) {
-            const scripts = target.blocks.getScripts();
+            // getScripts() returns the live internal array: iterating it while
+            // deleting mutated it and left orphan blocks behind.
+            const scripts = [...target.blocks.getScripts()];
             for (const sId of scripts) {
                 target.blocks.deleteBlock(sId);
             }
-            log(`✓ Tous les blocs du sprite "${spriteName}" ont été effacés.`);
+            log(`✓ Tous les blocs du sprite "${spriteName}" ont été effacés (${scripts.length} script(s)).`);
+        } else {
+            log(`⚠ Sprite "${spriteName}" introuvable : rien à effacer.`);
         }
         break;
     }
@@ -265,6 +337,11 @@ const executeAction = async (action, vm, log) => {
             const emptyItem = emptySprite(spriteName, 'pop', 'costume1');
             await vm.addSprite(JSON.stringify(emptyItem));
             target = findTarget(vm, spriteName);
+            try {
+                await applyDefaultCostume(vm, target);
+            } catch (e) {
+                log(`⚠ Costume par défaut non appliqué à "${spriteName}" : ${e.message}`);
+            }
             log(`✓ Sprite "${spriteName}" auto-créé.`);
         }
 
@@ -273,8 +350,6 @@ const executeAction = async (action, vm, log) => {
             break;
         }
 
-        const posX = action.x !== undefined ? Number(action.x) : 50;
-        const posY = action.y !== undefined ? Number(action.y) : 50;
         const blockSpecs = action.blocks || [];
 
         if (!Array.isArray(blockSpecs) || blockSpecs.length === 0) {
@@ -282,9 +357,34 @@ const executeAction = async (action, vm, log) => {
             break;
         }
 
-        const blocks = buildScript(blockSpecs, posX, posY, { vm, target });
+        // Warn about opcodes that don't exist in the palette instead of
+        // silently dropping broken blocks in the workspace.
+        const unknown = findUnknownOpcodes(blockSpecs);
+        if (unknown.length) {
+            log(`⚠ Opcode(s) inconnu(s) ignoré(s) du catalogue : ${unknown.join(', ')}. ` +
+                `Les blocs sont créés mais peuvent être incomplets.`);
+        }
+
+        // Auto-layout: if the AI gave no coordinates, place the script under
+        // the existing ones instead of stacking everything at (50, 50).
+        const auto = findFreeScriptPosition(target);
+        const posX = action.x !== undefined ? Number(action.x) : auto.x;
+        const posY = action.y !== undefined ? Number(action.y) : auto.y;
+
+        const blocks = buildScript(blockSpecs, posX, posY, {vm, target});
+        if (!blocks.length) {
+            log(`⚠ Aucun bloc valide à ajouter sur "${spriteName}".`);
+            break;
+        }
+
         await vm.shareBlocksToTarget(blocks, target.id);
-        log(`✓ Script de ${blockSpecs.length} blocs ajouté sur "${spriteName}" à (x: ${posX}, y: ${posY}).`);
+        if (target.blocks && target.blocks.updateTargetSpecificBlocks) {
+            target.blocks.updateTargetSpecificBlocks(target.isStage);
+        }
+        if (target.blocks && target.blocks.resetCache) {
+            target.blocks.resetCache();
+        }
+        log(`✓ Script de ${blockSpecs.length} bloc(s) ajouté sur "${spriteName}" à (x: ${posX}, y: ${posY}).`);
         break;
     }
 
@@ -292,7 +392,7 @@ const executeAction = async (action, vm, log) => {
         const spriteName = action.sprite || action.target;
         const target = findTarget(vm, spriteName);
         if (target && target.blocks) {
-            const oldScripts = target.blocks.getScripts();
+            const oldScripts = [...target.blocks.getScripts()];
             for (const sId of oldScripts) {
                 target.blocks.deleteBlock(sId);
             }
@@ -305,8 +405,8 @@ const executeAction = async (action, vm, log) => {
             await executeAction({
                 type: 'ADD_SCRIPT',
                 sprite: spriteName,
-                x: s.x ?? 50,
-                y: s.y ?? 50,
+                x: s.x,
+                y: s.y,
                 blocks: s.blocks
             }, vm, log);
         }
@@ -381,13 +481,20 @@ const interpretAndExecute = async (input, vm) => {
         }
     }
 
-    // Refresh Scratch UI
+    // Refresh the Scratch UI.
+    // refreshWorkspace() only redraws the *editing* target, so blocks added to
+    // another sprite stayed invisible until the user clicked it. We reset every
+    // touched block container's cache, then redraw the currently edited one.
     try {
+        for (const target of vm.runtime.targets) {
+            if (target.blocks && target.blocks.resetCache) target.blocks.resetCache();
+        }
+        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate(true);
         if (vm.refreshWorkspace) vm.refreshWorkspace();
-        if (vm.emitWorkspaceUpdate) vm.emitWorkspaceUpdate();
-        if (vm.emitTargetsUpdate) vm.emitTargetsUpdate(false);
+        if (vm.runtime.emitProjectChanged) vm.runtime.emitProjectChanged();
+        if (vm.runtime.requestBlocksUpdate) vm.runtime.requestBlocksUpdate();
     } catch (e) {
-        // Non-critical
+        log(`⚠ Rafraîchissement de l'interface partiel : ${e.message}`);
     }
 
     log('✨ Exécution terminée avec succès !');
