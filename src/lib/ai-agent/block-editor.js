@@ -122,6 +122,28 @@ const setParent = (target, blockId, parentId) => {
 };
 
 /**
+ * Repairs cap-block consistency after a re-link: `control_stop` renders as a
+ * cap (no notch) when its mutation says hasnext "false". If an edit chains a
+ * block under such a stop, the VM ends up with a `next` on a block that has no
+ * next connection — the workspace XML then makes scratch-blocks abort the
+ * whole workspace load ("Next statement does not exist"), which blanks the
+ * sprite's code area on the next refresh. Any stop with something under it
+ * must therefore declare hasnext "true" (Scratch 2.0 projects migrated to 3.0
+ * do exactly this).
+ * @param {object} target VM target
+ */
+const repairCapBlocks = target => {
+    const blocksMap = target.blocks._blocks || {};
+    for (const block of Object.values(blocksMap)) {
+        if (block.opcode !== 'control_stop' || !block.next) continue;
+        if (block.mutation && block.mutation.hasnext === 'true') continue;
+        block.mutation = block.mutation
+            ? {...block.mutation, hasnext: 'true'}
+            : {tagName: 'mutation', hasnext: 'true', children: []};
+    }
+};
+
+/**
  * Applies UPDATE_BLOCK: rebuilds the inputs/fields of an existing block in
  * place, preserving its id, position in the stack and any inner branches.
  * @param {object} action {sprite, address|script+path, inputs, fields, opcode?}
@@ -248,6 +270,7 @@ const applyDelete = (action, target, log) => {
 
     target.blocks.deleteBlock(resolved.blockId);
     if (typeof target.blocks._deleteScript === 'function') target.blocks._deleteScript(resolved.blockId);
+    repairCapBlocks(target);
     log(`✓ DELETE_BLOCK : bloc ${resolved.address} supprimé.`);
     return true;
 };
@@ -334,6 +357,7 @@ const applyInsert = (action, target, context, log) => {
         }
     }
 
+    repairCapBlocks(target);
     log(`✓ INSERT_BLOCKS : ${specs.length} bloc(s) inséré(s) ${position} ${resolved.address}.`);
     return true;
 };
@@ -376,5 +400,6 @@ export {
     applyReplace,
     buildDetachedStack,
     findAttachment,
+    repairCapBlocks,
     generateId
 };

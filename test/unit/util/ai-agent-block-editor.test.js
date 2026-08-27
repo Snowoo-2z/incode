@@ -5,6 +5,7 @@ import Blocks from 'scratch-vm/src/engine/blocks';
 import {buildScript} from '../../../src/lib/ai-agent/block-builder';
 import {resolveAddress, listAddressedScripts} from '../../../src/lib/ai-agent/block-address';
 import {applyUpdate, applyDelete, applyInsert, applyReplace} from '../../../src/lib/ai-agent/block-editor';
+import {interpretAndExecute} from '../../../src/lib/ai-agent/code-interpreter';
 
 /**
  * Builds a test fixture around a REAL scratch-vm Blocks container, so the edits
@@ -272,5 +273,154 @@ describe('block-editor — REPLACE_BLOCK', () => {
             '1/4 motion_movesteps'
         ]);
         expect(integrityProblems(fx.target)).toBe(0);
+    });
+});
+
+/**
+ * Counts the "cap block with a chained next" inconsistencies — the exact VM
+ * state that makes scratch-blocks abort the whole workspace reload
+ * ("Next statement does not exist") and blank the sprite's code area.
+ * @param {object} target VM target
+ * @returns {number} number of load-breaking stop blocks
+ */
+const capBlockCrashes = target => {
+    const map = target.blocks._blocks;
+    let crashes = 0;
+    for (const b of Object.values(map)) {
+        if (b.opcode === 'control_stop' && b.next && (!b.mutation || b.mutation.hasnext !== 'true')) {
+            crashes++;
+        }
+    }
+    return crashes;
+};
+
+describe('block-editor — cap-block consistency (workspace-wipe regression)', () => {
+    test('REPLACE_BLOCK chaining blocks under an unquoted `stop other scripts in sprite` stays loadable', () => {
+        const fx = makeFixture();
+        seed(fx, [
+            {opcode: 'event_whenbroadcastreceived'},
+            {opcode: 'control_wait', inputs: {DURATION: 1}},
+            {opcode: 'control_stop', fields: {STOP_OPTION: 'other scripts in sprite'}},
+            {opcode: 'looks_hide'}
+        ]);
+        applyReplace(
+            {address: '1/2', blocks: [
+                {opcode: 'control_stop', fields: {STOP_OPTION: 'other scripts in sprite'}},
+                {opcode: 'control_wait', inputs: {DURATION: 1}}
+            ]},
+            fx.target, fx.context, noop
+        );
+        applyDelete({address: '1/4'}, fx.target, noop); // the old stop
+
+        expect(capBlockCrashes(fx.target)).toBe(0);
+        expect(integrityProblems(fx.target)).toBe(0);
+        // The surviving stop keeps its option and a working next connection.
+        const stop = Object.values(fx.target.blocks._blocks)
+            .find(b => b.opcode === 'control_stop' && b.next);
+        expect(stop.fields.STOP_OPTION.value).toBe('other scripts in sprite');
+        expect(stop.mutation.hasnext).toBe('true');
+    });
+
+    test('INSERT_BLOCKS after a stop cap repairs hasnext', () => {
+        const fx = makeFixture();
+        seed(fx, [
+            {opcode: 'event_whenflagclicked'},
+            {opcode: 'control_stop', fields: {STOP_OPTION: 'all'}},
+            {opcode: 'looks_hide'}
+        ]);
+        // Simulate a stop-all that has a next but declares no next connection
+        // (e.g. produced by an older run): the editor must repair it.
+        const stop = Object.values(fx.target.blocks._blocks)
+            .find(b => b.opcode === 'control_stop');
+        stop.mutation.hasnext = 'false';
+
+        applyInsert(
+            {address: '1/3', position: 'after', blocks: [{opcode: 'looks_say', inputs: {MESSAGE: 'x'}}]},
+            fx.target, fx.context, noop
+        );
+        expect(capBlockCrashes(fx.target)).toBe(0);
+        expect(stop.mutation.hasnext).toBe('true');
+    });
+
+    test('full "fleche" scenario: the AI fix batch no longer produces an unloadable workspace', async () => {
+        const fx = makeFixture();
+        const script3 = [
+            {opcode: 'event_whenbroadcastreceived', fields: {BROADCAST_OPTION: {broadcast: true, value: 'first achat'}}},
+            {opcode: 'control_wait', inputs: {DURATION: 1}},
+            {opcode: 'control_stop', fields: {STOP_OPTION: 'other scripts in sprite'}},
+            {opcode: 'looks_hide'},
+            {opcode: 'motion_pointindirection', inputs: {DIRECTION: {
+                opcode: 'operator_mathop',
+                fields: {OPERATOR: 'atan'},
+                inputs: {NUM: {opcode: 'operator_divide', inputs: {
+                    NUM1: {opcode: 'data_variable', fields: {VARIABLE: 'quest_x'}},
+                    NUM2: {opcode: 'data_variable', fields: {VARIABLE: 'quest_y'}}
+                }}}
+            }}},
+            {opcode: 'control_if', inputs: {
+                CONDITION: {opcode: 'operator_lt', inputs: {
+                    OPERAND1: {opcode: 'data_variable', fields: {VARIABLE: 'quest_y'}},
+                    OPERAND2: 0
+                }},
+                SUBSTACK: [{opcode: 'motion_turnleft', inputs: {DEGREES: 180}}]
+            }},
+            {opcode: 'looks_show'}
+        ];
+        const script7 = [
+            {opcode: 'event_whenbroadcastreceived', fields: {BROADCAST_OPTION: {broadcast: true, value: 'see arrow'}}},
+            {opcode: 'motion_pointindirection', inputs: {DIRECTION: {
+                opcode: 'operator_mathop',
+                fields: {OPERATOR: 'atan'},
+                inputs: {NUM: {opcode: 'operator_divide', inputs: {
+                    NUM1: {opcode: 'data_variable', fields: {VARIABLE: 'quest_x'}},
+                    NUM2: {opcode: 'data_variable', fields: {VARIABLE: 'quest_y'}}
+                }}}
+            }}},
+            {opcode: 'control_if', inputs: {
+                CONDITION: {opcode: 'operator_lt', inputs: {
+                    OPERAND1: {opcode: 'data_variable', fields: {VARIABLE: 'quest_y'}},
+                    OPERAND2: 0
+                }},
+                SUBSTACK: [{opcode: 'motion_turnleft', inputs: {DEGREES: 180}}]
+            }},
+            {opcode: 'looks_show'}
+        ];
+        seed(fx, script3);
+        seed(fx, script7);
+
+        // The EXACT code the AI sent (note the unquoted `stop other scripts in sprite`).
+        const aiFix = '```scratch\n' + [
+            'on Balle:',
+            '  replace 1/2:',
+            '    stop other scripts in sprite',
+            '    wait 1',
+            '  delete 1/3',
+            '  replace 1/5:',
+            '    point (+ (mathop "atan" (/ quest_x quest_y)) (* 180 (< quest_y 0)))',
+            '  delete 1/6',
+            '  replace 2/2:',
+            '    point (+ (mathop "atan" (/ quest_x quest_y)) (* 180 (< quest_y 0)))',
+            '  delete 2/3'
+        ].join('\n') + '\n```';
+
+        const report = await interpretAndExecute(aiFix, fx.context.vm);
+        expect(report.success).toBe(true);
+
+        // Workspace stays loadable: no cap block with a chained next anywhere.
+        expect(capBlockCrashes(fx.target)).toBe(0);
+        expect(integrityProblems(fx.target)).toBe(0);
+        // Both scripts survive with their new point blocks.
+        expect(fx.target.blocks.getScripts().length).toBe(2);
+        const opcodes = addressed(fx.target);
+        expect(opcodes.some(l => l.includes('control_if'))).toBe(false);
+        // Both new point directions carry the atan + 180*(y<0) formula.
+        const addCount = Object.values(fx.target.blocks._blocks)
+            .filter(b => b.opcode === 'operator_add').length;
+        expect(addCount).toBe(2);
+        // The rebuilt stop really says "other scripts in sprite" and connects below.
+        const stop = Object.values(fx.target.blocks._blocks)
+            .find(b => b.opcode === 'control_stop' && b.next);
+        expect(stop.fields.STOP_OPTION.value).toBe('other scripts in sprite');
+        expect(stop.mutation.hasnext).toBe('true');
     });
 });

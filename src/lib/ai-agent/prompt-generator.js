@@ -203,6 +203,8 @@ const DSL_LANGUAGE_RULES = `Règles du langage :
 - L'IMBRICATION se fait par l'INDENTATION (2 espaces). Les blocs C (boucles, si) se terminent par \`:\` et leur contenu est indenté en dessous.
 - Un bloc rapporteur ou une condition s'écrit entre parenthèses : \`(random 1 10)\`, \`(touching _edge_)\`, \`(> (timer) 5)\`.
 - Le texte va entre guillemets : \`say "Bonjour"\`.
+- Une valeur de menu EN PLUSIEURS MOTS va entre guillemets : \`stop "other scripts in sprite"\`,
+  \`costume "Incomming call"\`, \`whenkey "up arrow"\` — sinon seul le premier mot est pris.
 - Un MOT NU est une VARIABLE, pas du texte : \`set py (+ py 1)\` additionne la variable \`py\`
   (sinon Scratch affiche le texte « py + 1 » et calcule 0 + 1). Guillemets = texte littéral.
 - Une valeur entre guillemets reste du TEXTE même si elle ne contient que des chiffres :

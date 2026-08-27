@@ -379,6 +379,29 @@ const buildFields = (block, givenFields, context) => {
 };
 
 /**
+ * Valid `control_stop` options (language-neutral values).
+ * @type {Array<string>}
+ */
+const STOP_OPTIONS = ['all', 'this script', 'other scripts in sprite', 'other scripts in stage'];
+
+/**
+ * Normalizes a `control_stop` STOP_OPTION coming from the AI: exact value if
+ * known, case/spacing-insensitive match otherwise ("Other Scripts In Sprite"),
+ * or the raw value unchanged (Scratch dropdowns tolerate unknown values at
+ * load time; only the hasnext inconsistency used to break the workspace).
+ * @param {any} rawOption option as provided
+ * @returns {string} normalized option
+ */
+const normalizeStopOption = rawOption => {
+    const option = String(rawOption || '').trim();
+    if (!option) return 'all';
+    if (STOP_OPTIONS.includes(option)) return option;
+    const squashed = option.toLowerCase().replace(/\s+/g, ' ');
+    const match = STOP_OPTIONS.find(known => known.replace(/\s+/g, ' ') === squashed);
+    return match || option;
+};
+
+/**
  * Builds a single block (plus its shadows and nested blocks).
  * @param {object} spec {opcode, inputs, fields, ...}
  * @param {string} blockId id to use
@@ -473,10 +496,13 @@ const buildSingleBlock = (spec, blockId, parentId, blocksList, context) => {
 
     // "control_stop" needs a mutation telling scratch-blocks if it can connect below.
     if (opcode === 'control_stop' && !block.mutation) {
-        const option = plainValue(givenFields.STOP_OPTION) || 'all';
+        const option = normalizeStopOption(plainValue(givenFields.STOP_OPTION));
+        // buildFields (below) and the mutation must agree on the same value.
+        if (typeof givenFields.STOP_OPTION !== 'undefined') givenFields.STOP_OPTION = option;
         block.mutation = {
             tagName: 'mutation',
-            hasnext: (option === 'other scripts in sprite' || option === 'other scripts in stage') ? 'true' : 'false',
+            hasnext: (option === 'other scripts in sprite' || option === 'other scripts in stage') ?
+                'true' : 'false',
             children: []
         };
     }
@@ -519,8 +545,20 @@ const buildBlockStack = (specsList, parentId, blocksList, context) => {
         const currParentId = prevBlock ? prevBlock.id : (parentId || null);
         const block = buildSingleBlock(spec, blockId, currParentId, blocksList, context);
 
-        if (prevBlock) prevBlock.next = blockId;
-        else firstId = blockId;
+        if (prevBlock) {
+            prevBlock.next = blockId;
+            // A block with something chained under it MUST keep a next
+            // connection. `control_stop` is a cap block whose mutation says
+            // `hasnext`; leaving hasnext "false" while wiring a `next` produced
+            // workspace XML that scratch-blocks refuses to load ("Next
+            // statement does not exist"), wiping the sprite's whole code area
+            // on the next workspace refresh.
+            if (prevBlock.opcode === 'control_stop') {
+                prevBlock.mutation = prevBlock.mutation ||
+                    {tagName: 'mutation', hasnext: 'true', children: []};
+                prevBlock.mutation.hasnext = 'true';
+            }
+        } else firstId = blockId;
 
         prevBlock = block;
     }
