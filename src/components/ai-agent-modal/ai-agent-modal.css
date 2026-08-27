@@ -14,8 +14,10 @@
     align-items: center;
     gap: 0.85rem;
     padding: 1rem 1.5rem;
-    background: linear-gradient(135deg, $ui-primary, $looks-secondary);
-    color: $ui-white;
+    /* $ui-primary is a pale color in the light theme and near-black in the dark theme,
+       so it cannot be paired with $ui-white text: use the modal header colors instead. */
+    background: linear-gradient(135deg, $ui-modal-header-background, $looks-secondary);
+    color: $ui-modal-header-foreground;
 }
 
 .header-icon {
@@ -95,13 +97,13 @@
 
 .tab-active {
     opacity: 1;
-    background: $ui-white;
-    color: $ui-primary;
+    background: $ui-modal-background;
+    color: $text-primary;
     box-shadow: 0 1px 4px hsla(0, 0%, 0%, 0.12);
 }
 
 .tab-active:hover {
-    background: $ui-white;
+    background: $ui-modal-background;
 }
 
 /* ============ Steps / Sections ============ */
@@ -109,7 +111,9 @@
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
-    background: $ui-white;
+    /* $ui-white is #111111 in the dark theme, which would make the cards invisible
+       on the equally dark modal body: $ui-secondary stays a visible surface in both. */
+    background: $ui-secondary;
     border: 1px solid $ui-black-transparent;
     border-radius: 0.85rem;
     padding: 1rem 1.15rem;
@@ -137,8 +141,8 @@
     width: 1.55rem;
     height: 1.55rem;
     border-radius: 50%;
-    background: $ui-primary;
-    color: $ui-white;
+    background: $looks-secondary-dark;
+    color: $ui-modal-header-foreground;
     font-size: 0.82rem;
     font-weight: bold;
     flex-shrink: 0;
@@ -160,15 +164,21 @@
     padding: 0.75rem;
     font-family: inherit;
     font-size: 0.85rem;
-    background: $ui-white;
-    color: $text-primary;
+    background: $input-background;
+    color: $ui-modal-foreground;
     resize: vertical;
     outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.textarea::placeholder {
+    /* opacity keeps the placeholder readable in both the light and the dark theme */
+    color: inherit;
+    opacity: 0.55;
+}
+
 .textarea:focus {
-    border-color: $ui-primary;
+    border-color: $motion-primary;
     box-shadow: 0 0 0 3px hsla(215, 100%, 65%, 0.15);
 }
 
@@ -180,8 +190,12 @@
     border-color: #2d2d38;
 }
 
+.textarea-code::placeholder {
+    color: #94a3b8;
+}
+
 .textarea-code:focus {
-    border-color: $ui-primary;
+    border-color: $motion-primary;
 }
 
 /* ============ Buttons ============ */
@@ -210,8 +224,9 @@
 }
 
 .primary-btn {
-    background: $ui-primary;
-    color: $ui-white;
+    /* $looks-secondary-dark keeps white text above 4.5:1 with every accent */
+    background: $looks-secondary-dark;
+    color: $ui-modal-header-foreground;
     box-shadow: 0 2px 6px hsla(215, 100%, 50%, 0.28);
 }
 
@@ -230,14 +245,14 @@
 }
 
 .success-btn {
-    background: #10b981;
-    color: $ui-white;
+    background: #047857;
+    color: $ui-modal-header-foreground;
     box-shadow: 0 2px 6px hsla(160, 84%, 39%, 0.3);
 }
 
 .template-btn {
-    background: #f59e0b;
-    color: $ui-white;
+    background: #b45309;
+    color: $ui-modal-header-foreground;
     box-shadow: 0 2px 6px hsla(38, 92%, 50%, 0.28);
 }
 
@@ -248,7 +263,7 @@
 /* ============ Terminal Console Box ============ */
 .terminal-box {
     background: #0f172a;
-    color: #38bdf8;
+    color: #f8fafc;
     border-radius: 0.6rem;
     padding: 0.85rem 1rem;
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
@@ -262,200 +277,65 @@
     box-shadow: inset 0 1px 6px hsla(0, 0%, 0%, 0.4);
 }
 
-/* ============ CLI Tab ============ */
-.cli-container {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    border-radius: 0.75rem;
-    overflow: hidden;
-    border: 1px solid #1e293b;
-    box-shadow: 0 2px 10px hsla(0, 0%, 0%, 0.15);
-}
+/* ============ Agent tab ============ */
 
-.cli-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.5rem 0.85rem;
-    background: #1e293b;
-    border-bottom: 1px solid #334155;
-}
-
-.cli-dot {
-    width: 0.7rem;
-    height: 0.7rem;
-    border-radius: 50%;
-    display: inline-block;
-}
-
-.cli-dot-red { background: #ff5f56; }
-.cli-dot-yellow { background: #ffbd2e; }
-.cli-dot-green { background: #27c93f; }
-
-.cli-toolbar-title {
-    margin-left: 0.5rem;
-    color: #94a3b8;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    font-size: 0.78rem;
-}
-
-.cli-output {
+/* What the AI will actually receive: one line per sprite, no code. Shown so
+   the user can see how light the context is before copying the prompt. */
+.overview-box {
     background: #0f172a;
-    color: #f8fafc;
-    padding: 1rem;
-    height: 320px;
-    overflow-y: auto;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    font-size: 0.82rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
-.cli-input-row {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    padding: 0.6rem 0.85rem;
-    background: #0f172a;
-    border-top: 1px solid #1e293b;
-}
-
-.cli-prompt-symbol {
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    font-weight: bold;
-    color: #27c93f;
-}
-
-.cli-input {
-    flex: 1;
-    padding: 0.4rem 0;
-    border: none;
-    background: transparent;
-    color: #f8fafc;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    font-size: 0.82rem;
-    outline: none;
-    caret-color: #27c93f;
-}
-
-.cli-input::placeholder {
-    color: #475569;
-}
-
-/* ============ Inspector Sprites ============ */
-.sprite-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    max-height: 420px;
-    overflow-y: auto;
-    padding-right: 0.15rem;
-}
-
-.sprite-card {
-    border: 1px solid $ui-black-transparent;
-    border-radius: 0.75rem;
-    padding: 0.85rem 1rem;
-    background: $ui-white;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    box-shadow: 0 1px 3px hsla(0, 0%, 0%, 0.05);
-    transition: box-shadow 0.2s, transform 0.1s;
-}
-
-.sprite-card:hover {
-    box-shadow: 0 3px 10px hsla(0, 0%, 0%, 0.1);
-}
-
-.sprite-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: bold;
-    font-size: 0.92rem;
-}
-
-.sprite-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-}
-
-.meta-chip {
-    padding: 0.2rem 0.55rem;
-    border-radius: 0.4rem;
-    font-size: 0.74rem;
-    font-weight: 500;
-    background: $ui-black-transparent;
-    color: $text-primary;
-}
-
-.badge {
-    padding: 0.22rem 0.6rem;
-    border-radius: 0.4rem;
-    font-size: 0.74rem;
-    font-weight: 600;
-    background: $ui-primary;
-    color: $ui-white;
-}
-
-.script-preview {
-    background: #1e1e24;
     color: #a5f3fc;
-    padding: 0.6rem 0.8rem;
-    border-radius: 0.5rem;
+    border-radius: 0.6rem;
+    padding: 0.7rem 0.9rem;
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     line-height: 1.5;
-    max-height: 130px;
+    max-height: 150px;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-word;
+    border: 1px solid #1e293b;
 }
 
-.empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 2.5rem 1rem;
-    text-align: center;
-    opacity: 0.65;
+/* Step 4 of the agent loop: the text to paste back in the same conversation.
+   It is the heart of the mode, so it gets its own accent frame. */
+.follow-up-section {
+    border: 2px solid $pen-primary;
+    background: $ui-white;
 }
 
-.empty-state-icon {
-    font-size: 2rem;
-}
-
-.script-empty {
-    opacity: 0.6;
-    font-size: 0.8rem;
-    font-style: italic;
+.follow-up-box {
+    background: #052e2b;
+    color: #d1fae5;
+    border-radius: 0.6rem;
+    padding: 0.85rem 1rem;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    max-height: 260px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border: 1px solid $pen-primary;
+    box-shadow: inset 0 1px 6px hsla(0, 0%, 0%, 0.35);
 }
 
 /* ============ Scrollbars ============ */
 .body::-webkit-scrollbar,
 .terminal-box::-webkit-scrollbar,
-.cli-output::-webkit-scrollbar,
-.sprite-list::-webkit-scrollbar,
-.script-preview::-webkit-scrollbar {
+.overview-box::-webkit-scrollbar,
+.follow-up-box::-webkit-scrollbar {
     width: 0.5rem;
     height: 0.5rem;
 }
 
-.body::-webkit-scrollbar-thumb,
-.sprite-list::-webkit-scrollbar-thumb {
+.body::-webkit-scrollbar-thumb {
     background: $ui-black-transparent;
     border-radius: 0.5rem;
 }
 
 .terminal-box::-webkit-scrollbar-thumb,
-.cli-output::-webkit-scrollbar-thumb,
-.script-preview::-webkit-scrollbar-thumb {
+.overview-box::-webkit-scrollbar-thumb,
+.follow-up-box::-webkit-scrollbar-thumb {
     background: #334155;
     border-radius: 0.5rem;
 }

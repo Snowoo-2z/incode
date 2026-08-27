@@ -6,7 +6,13 @@
 
 import {emptySprite} from '../empty-assets.js';
 import {buildScript, findUnknownOpcodes, generateId} from './block-builder.js';
-import {applyDefaultCostume} from './sprite-costumes.js';
+import {
+    addSvgCostume,
+    applyDefaultCostume,
+    renameCostume as renameCostumeOnTarget,
+    deleteCostume as deleteCostumeOnTarget,
+    selectCostume as selectCostumeOnTarget
+} from './sprite-costumes.js';
 import {parseDSL} from './dsl-parser.js';
 import {applyUpdate, applyDelete, applyInsert, applyReplace} from './block-editor.js';
 import {resolveAddress} from './block-address.js';
@@ -240,6 +246,18 @@ const executeAction = async (action, vm, log) => {
             log(`ℹ Le sprite "${spriteName}" existe déjà.`);
         }
 
+        // The AI may ship its own drawings along with the sprite.
+        if (target && Array.isArray(action.costumes)) {
+            for (const costume of action.costumes) {
+                const added = await addSvgCostume(vm, target, costume || {});
+                if (added) {
+                    log(`✓ Costume "${added.name}" ajouté à "${spriteName}".`);
+                } else {
+                    log(`⚠ Costume ignoré sur "${spriteName}" : SVG invalide.`);
+                }
+            }
+        }
+
         if (target && target.setXY) {
             if (action.x !== undefined || action.y !== undefined) {
                 const newX = action.x !== undefined ? Number(action.x) : target.x;
@@ -261,6 +279,119 @@ const executeAction = async (action, vm, log) => {
             log(`✓ Sprite "${spriteName}" supprimé.`);
         } else {
             log(`⚠ Impossible de supprimer "${spriteName}" : introuvable ou scène.`);
+        }
+        break;
+    }
+
+    case 'RENAME_SPRITE':
+    case 'RENOMMER_SPRITE': {
+        // The AI renames the sprites it creates ("Sprite1" -> "Raquette") or the
+        // ones it has to fix. vm.renameSprite also updates every reference in
+        // the other sprites ("touching <Raquette>", "point towards", ...), which
+        // is exactly what a plain `target.name = x` would break.
+        const spriteName = action.sprite || action.from || action.target;
+        const newName = action.name || action.newName || action.to;
+        const target = findTarget(vm, spriteName);
+        if (!target) {
+            log(`⚠ RENAME_SPRITE : sprite "${spriteName || '?'}" introuvable.`);
+            break;
+        }
+        if (target.isStage) {
+            log('⚠ RENAME_SPRITE : la scène ne peut pas être renommée.');
+            break;
+        }
+        if (!newName) {
+            log(`⚠ RENAME_SPRITE : nouveau nom manquant pour "${spriteName}".`);
+            break;
+        }
+        if (target.getName() === newName) {
+            log(`ℹ "${spriteName}" porte déjà ce nom.`);
+            break;
+        }
+        const existing = findTarget(vm, newName);
+        if (existing) {
+            log(`⚠ RENAME_SPRITE : un sprite nommé "${newName}" existe déjà.`);
+            break;
+        }
+        try {
+            vm.renameSprite(target.id, newName);
+            log(`✓ Sprite "${spriteName}" renommé en "${newName}".`);
+        } catch (e) {
+            log(`⚠ RENAME_SPRITE : échec (${e.message}).`);
+        }
+        break;
+    }
+
+    case 'CREATE_COSTUME':
+    case 'ADD_COSTUME': {
+        const spriteName = action.sprite || action.target ||
+            (vm.editingTarget ? vm.editingTarget.getName() : null);
+        const target = findTarget(vm, spriteName);
+        if (!target) {
+            log(`⚠ CREATE_COSTUME : cible "${spriteName || '?'}" introuvable.`);
+            break;
+        }
+        const added = await addSvgCostume(vm, target, action);
+        if (added) {
+            const kind = target.isStage ? 'arrière-plan' : 'costume';
+            log(`✓ ${kind === 'arrière-plan' ? 'Arrière-plan' : 'Costume'} "${added.name}" ` +
+                `(${Math.round(added.width)}×${Math.round(added.height)}) ` +
+                `ajouté à "${target.getName()}" [index ${added.index + 1}].`);
+        } else {
+            log(`⚠ CREATE_COSTUME : aucun SVG valide fourni pour "${spriteName}". ` +
+                `Attendu : un code SVG complet (<svg ...>...</svg>) ou une forme prédéfinie.`);
+        }
+        break;
+    }
+
+    case 'RENAME_COSTUME': {
+        const spriteName = action.sprite || action.target;
+        const target = findTarget(vm, spriteName);
+        if (!target) {
+            log(`⚠ RENAME_COSTUME : cible "${spriteName}" introuvable.`);
+            break;
+        }
+        const from = action.costume ?? action.from ?? action.oldName;
+        const to = action.name ?? action.newName ?? action.to;
+        const applied = renameCostumeOnTarget(target, from, to);
+        if (applied) {
+            log(`✓ Costume "${from}" de "${target.getName()}" renommé en "${applied}".`);
+        } else {
+            log(`⚠ RENAME_COSTUME : costume "${from}" introuvable sur "${target.getName()}".`);
+        }
+        break;
+    }
+
+    case 'DELETE_COSTUME': {
+        const spriteName = action.sprite || action.target;
+        const target = findTarget(vm, spriteName);
+        if (!target) {
+            log(`⚠ DELETE_COSTUME : cible "${spriteName}" introuvable.`);
+            break;
+        }
+        const removed = deleteCostumeOnTarget(target, action.costume ?? action.name);
+        if (removed) {
+            log(`✓ Costume "${removed}" supprimé de "${target.getName()}".`);
+        } else {
+            log(`⚠ DELETE_COSTUME : "${action.costume ?? action.name}" introuvable ` +
+                `(ou dernier costume restant) sur "${target.getName()}".`);
+        }
+        break;
+    }
+
+    case 'SET_COSTUME':
+    case 'SWITCH_COSTUME': {
+        const spriteName = action.sprite || action.target;
+        const target = findTarget(vm, spriteName);
+        if (!target) {
+            log(`⚠ SET_COSTUME : cible "${spriteName}" introuvable.`);
+            break;
+        }
+        const shown = selectCostumeOnTarget(target, action.costume ?? action.name);
+        if (shown) {
+            log(`✓ "${target.getName()}" affiche maintenant le costume "${shown}".`);
+        } else {
+            log(`⚠ SET_COSTUME : costume "${action.costume ?? action.name}" introuvable sur "${target.getName()}".`);
         }
         break;
     }
