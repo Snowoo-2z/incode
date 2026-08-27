@@ -256,3 +256,38 @@ describe('DSL parser — end-to-end into the block builder', () => {
         assertNoDanglingRefs(blocks);
     });
 });
+
+describe('DSL parser — multi-word single-argument values', () => {
+    // Regression: `stop other scripts in sprite` (unquoted) used to keep only
+    // the first word as STOP_OPTION ("other"), which built a cap block
+    // (hasnext "false") with blocks still chained under it.
+    test('joins bare words of a single-parameter block into one value', () => {
+        const actions = parseDSL([
+            'sprite S:',
+            '  whenflagclicked',
+            '  stop other scripts in sprite'
+        ].join('\n'));
+        const script = actions.find(a => a.type === 'ADD_SCRIPT');
+        expect(script.blocks[1].inputs.STOP_OPTION).toEqual({__variable: 'other scripts in sprite'});
+    });
+
+    test('joins multi-word costume / sound / message names', () => {
+        const spec = parseCall('costume Incomming call');
+        expect(spec.inputs.COSTUME).toEqual({__variable: 'Incomming call'});
+        const saySpec = parseCall('say Bonjour le monde');
+        expect(saySpec.inputs.MESSAGE).toEqual({__variable: 'Bonjour le monde'});
+        const playSpec = parseCall('playuntildone iphone sonnerie');
+        expect(playSpec.inputs.SOUND_MENU).toEqual({__variable: 'iphone sonnerie'});
+    });
+
+    test('does not join when a token is numeric (wait 1 second stays wait 1)', () => {
+        const spec = parseCall('wait 1 second');
+        expect(spec.inputs.DURATION).toBe(1);
+    });
+
+    test('leaves multi-parameter blocks untouched', () => {
+        const spec = parseCall('gotoxy 10 20');
+        expect(spec.inputs.X).toBe(10);
+        expect(spec.inputs.Y).toBe(20);
+    });
+});

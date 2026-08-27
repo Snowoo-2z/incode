@@ -370,6 +370,24 @@ const parseArgs = str => {
 };
 
 /**
+ * True when a positional value is a plain scalar word (number, string or
+ * bare-word variable marker) — i.e. not a nested block or list.
+ * @param {any} v candidate
+ * @returns {boolean} result
+ */
+const isPlainWord = v =>
+    typeof v === 'string' || typeof v === 'number' ||
+        (!!v && typeof v === 'object' && typeof v.__variable === 'string');
+
+/**
+ * Text of a plain word (unwraps the bare-word variable marker).
+ * @param {any} v plain word
+ * @returns {string} text
+ */
+const wordText = v => (v && typeof v === 'object' && typeof v.__variable === 'string') ?
+    v.__variable : String(v);
+
+/**
  * Assembles a block spec from an opcode and parsed arguments.
  * Every value is placed under `inputs`; the block-builder reroutes field-only
  * names (KEY_OPTION, VARIABLE, EFFECT, ...) to `fields` automatically.
@@ -382,6 +400,19 @@ const assembleSpec = (opcode, positional, named) => {
     const spec = {opcode};
     const inputs = {};
     const order = getParamOrder(opcode);
+    // A single-parameter block given several bare words is ONE multi-word
+    // value, not several: `stop other scripts in sprite`, `say Bonjour le
+    // monde`, a costume / sound name with spaces... Keeping only the first
+    // word built `stop` with STOP_OPTION "other": a cap block (mutation
+    // hasnext "false") with blocks still chained under it — scratch-blocks
+    // then aborts the whole workspace reload ("Next statement does not
+    // exist"), which blanks the sprite's code area. Join the words instead,
+    // unless one of them is numeric (protects `wait 1 second`-style slop).
+    if (order.length === 1 && positional.length > 1 &&
+            !positional.some(v => typeof v === 'number') &&
+            positional.every(isPlainWord)) {
+        positional = [{__variable: positional.map(wordText).join(' ')}];
+    }
     let pi = 0;
     for (const param of order) {
         if (Object.prototype.hasOwnProperty.call(named, param)) {
