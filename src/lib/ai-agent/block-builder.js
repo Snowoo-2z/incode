@@ -161,12 +161,58 @@ const isBlockSpec = val =>
     !!val && typeof val === 'object' && !Array.isArray(val) && typeof val.opcode === 'string';
 
 /**
+ * True when the value is the DSL marker for an UNQUOTED word, i.e. a variable
+ * reference written as `(+ px dx)` instead of `{opcode: 'data_variable', ...}`.
+ * @param {any} val candidate
+ * @returns {boolean} result
+ */
+const isVariableRef = val =>
+    !!val && typeof val === 'object' && !Array.isArray(val) && typeof val.__variable === 'string';
+
+/**
+ * Looks up a scalar variable WITHOUT creating it.
+ * `resolveOrCreateVariable` would happily create it, which must not happen for a
+ * bare word that turns out to be plain text or a menu item (`_edge_`).
+ * @param {string} varName variable name
+ * @param {object} context {vm, target}
+ * @returns {?string} variable id, or null when it does not exist
+ */
+const lookupVariableId = (varName, context) => {
+    const {vm, target} = context || {};
+    if (!vm || !vm.runtime) return null;
+    const stage = vm.runtime.getTargetForStage ? vm.runtime.getTargetForStage() : null;
+    if (target && target.lookupVariableByNameAndType) {
+        const own = target.lookupVariableByNameAndType(varName, SCALAR_TYPE);
+        if (own) return own.id;
+    }
+    if (stage && stage.lookupVariableByNameAndType) {
+        const globalVar = stage.lookupVariableByNameAndType(varName, SCALAR_TYPE);
+        if (globalVar) return globalVar.id;
+    }
+    return null;
+};
+
+/**
+ * Resolves a bare-word marker: variable reporter when the variable exists,
+ * plain literal otherwise.
+ * @param {any} val raw value
+ * @param {object} context {vm, target}
+ * @returns {any} block spec, literal, or the untouched value
+ */
+const resolveVariableRef = (val, context) => {
+    if (!isVariableRef(val)) return val;
+    const name = val.__variable;
+    return lookupVariableId(name, context) ? {opcode: 'data_variable', fields: {VARIABLE: name}} : name;
+};
+
+/**
  * Extracts a plain value from what the AI may have written:
  * 10 / "10" / [1, [4, "10"]] / {value: 10}
  * @param {any} val raw value
  * @returns {any} plain value
  */
 const plainValue = val => {
+    if (isVariableRef(val)) return val.__variable;
     if (Array.isArray(val)) {
         // Tolerate the sb3 serialized form so old AI answers keep working.
         let cur = val;
@@ -210,14 +256,17 @@ const resolveMenuDefault = (schema, context) => {
  * Builds one input slot of a block, creating shadows and nested blocks.
  * @param {string} opcode parent opcode
  * @param {string} inputName input name
- * @param {any} rawValue value provided by the AI (may be undefined)
+ * @param {any} inputValue value provided by the AI (may be undefined)
  * @param {string} parentId parent block id
  * @param {Array} blocksList accumulator
  * @param {object} context {vm, target}
  * @returns {?object} hydrated input descriptor
  */
-const buildInput = (opcode, inputName, rawValue, parentId, blocksList, context) => {
+const buildInput = (opcode, inputName, inputValue, parentId, blocksList, context) => {
     const schema = getInputSchema(opcode, inputName);
+    // An unquoted word from the DSL (`(+ px dx)`) becomes a real variable
+    // reporter when that variable exists, otherwise it stays a literal.
+    const rawValue = resolveVariableRef(inputValue, context);
 
     // --- Branch (SUBSTACK / SUBSTACK2) -------------------------------------
     if (schema.branch) {
@@ -293,7 +342,10 @@ const buildFields = (block, givenFields, context) => {
     const provided = Object.assign({}, getDefaultFields(opcode), givenFields);
 
     for (const [name, rawValue] of Object.entries(provided)) {
-        const descriptor = (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) ? rawValue : null;
+        // A bare-word marker is an object too, but it carries no `.value`: it has
+        // to be unwrapped by plainValue(), not read as a descriptor.
+        const descriptor = (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) &&
+            !isVariableRef(rawValue)) ? rawValue : null;
         const value = plainValue(descriptor ? descriptor.value : rawValue);
 
         if (name === 'VARIABLE' || (descriptor && descriptor.variable)) {
@@ -533,6 +585,9 @@ export {
     resolveOrCreateVariable,
     resolveOrCreateBroadcast,
     resolveOrCreateList,
+    lookupVariableId,
+    resolveVariableRef,
+    isVariableRef,
     findUnknownOpcodes,
     generateId
 };

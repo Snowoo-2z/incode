@@ -64,15 +64,20 @@ describe('DSL parser — parseCall', () => {
     });
 
     test('routes variable name then value for set/change', () => {
+        // An unquoted word is marked as a variable reference; block-builder
+        // resolves it against the real VM (and falls back on a literal).
         expect(parseCall('set score 0'))
-            .toEqual({opcode: 'data_setvariableto', inputs: {VARIABLE: 'score', VALUE: 0}});
+            .toEqual({
+                opcode: 'data_setvariableto',
+                inputs: {VARIABLE: {__variable: 'score'}, VALUE: 0}
+            });
     });
 
     test('parses nested reporters in parentheses', () => {
         expect(parseCall('change score (random 1 10)')).toEqual({
             opcode: 'data_changevariableby',
             inputs: {
-                VARIABLE: 'score',
+                VARIABLE: {__variable: 'score'},
                 VALUE: {opcode: 'operator_random', inputs: {FROM: 1, TO: 10}}
             }
         });

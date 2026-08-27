@@ -29,6 +29,7 @@
  */
 
 import {BLOCK_SCHEMA, getDefaultInputs, getDefaultFields, isKnownOpcode} from './block-schema.js';
+import {SHAPES} from './sprite-costumes.js';
 
 /**
  * Opcodes that start a new script (hat blocks). Used to split a sprite body
@@ -321,14 +322,21 @@ const readValue = (str, start) => {
         return {value: buf, next: i};
     }
 
-    // Bare word (until whitespace)
+    // Bare word (until whitespace).
+    // An UNQUOTED word is a variable reference, not text: text must be quoted
+    // (`say "Bonjour"`). The parser does not know the project's variables, so it
+    // only marks the word; block-builder resolves the marker against the real VM
+    // and falls back on the literal when no such variable exists (menu items
+    // like `_edge_`, or a typo). Without this, `set py (+ py 1)` put the *text*
+    // "py" in the green operator, which Scratch then computed as 0 + 1.
     const wordStart = i;
     while (i < n && !/\s/.test(str[i])) i++;
     const word = str.slice(wordStart, i);
-    if (word !== '' && /^[+-]?(\d+\.?\d*|\.\d+)$/.test(word)) {
+    if (word === '') return {value: '', next: i};
+    if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(word)) {
         return {value: Number(word), next: i};
     }
-    return {value: word, next: i};
+    return {value: {__variable: word}, next: i};
 };
 
 /**
@@ -513,7 +521,37 @@ const buildTree = text => {
 };
 
 /**
+ * Splits a value list on the commas that are NOT inside quotes.
+ * @param {string} str right-hand side of an assignment
+ * @returns {Array<string>} parts
+ */
+const splitOutsideQuotes = str => {
+    const parts = [];
+    let buf = '';
+    let quote = null;
+    for (const ch of str) {
+        if (quote) {
+            buf += ch;
+            if (ch === quote) quote = null;
+        } else if (ch === '"' || ch === '\'') {
+            quote = ch;
+            buf += ch;
+        } else if (ch === ',') {
+            parts.push(buf);
+            buf = '';
+        } else {
+            buf += ch;
+        }
+    }
+    parts.push(buf);
+    return parts;
+};
+
+/**
  * Parses "= value" or "= a, b, c" tails for var/list directives.
+ * A QUOTED value always stays text, even when it only contains digits:
+ * `var map_data = "1111111110..."` is a string of digits, not 1.11e+63 (which
+ * silently destroyed every `letterof` lookup on it).
  * @param {string} tail text after the name
  * @returns {(string|number|Array<string>|null)} parsed value (null when absent)
  */
@@ -522,16 +560,193 @@ const parseAssignTail = tail => {
     if (!trimmed.startsWith('=')) return null;
     const rhs = trimmed.slice(1).trim();
     if (rhs === '') return null;
-    if (rhs.includes(',')) {
-        return rhs.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+
+    const parts = splitOutsideQuotes(rhs);
+    if (parts.length > 1) {
+        return parts.map(part => part.trim()
+            .replace(/^["']|["']$/g, ''));
     }
-    const unquoted = rhs.replace(/^["']|["']$/g, '');
-    const num = Number(unquoted);
-    return (unquoted !== '' && !isNaN(num) && /^[+-]?(\d+\.?\d*|\.\d+)$/.test(unquoted)) ? num : unquoted;
+
+    const value = parts[0].trim();
+    const unquote = value.replace(/^["']|["']$/g, '');
+    const wasQuoted = unquote !== value;
+    if (wasQuoted) return unquote;
+    const num = Number(unquote);
+    return (unquote !== '' && !isNaN(num) && /^[+-]?(\d+\.?\d*|\.\d+)$/.test(unquote)) ? num : unquote;
 };
 
 /** Keywords that introduce a targeted-edit directive rather than a block. */
 const EDIT_KEYWORDS = new Set(['edit', 'delete', 'del', 'insert', 'replace']);
+
+/**
+ * Keywords that introduce a sprite-management directive (rename / delete)
+ * rather than a block. Kept apart from the costume keywords so a line like
+ * `renamesprite Balle = Raquette` is never mistaken for a block.
+ * @type {Set<string>}
+ */
+const SPRITE_KEYWORDS = new Set(['renamesprite', 'rename', 'deletesprite', 'removesprite']);
+
+/**
+ * Parses a sprite-management directive node into an action.
+ * Supported forms:
+ *   renamesprite <ancien> = <nouveau>
+ *   renamesprite <nouveau>          (renames the sprite of the enclosing `on`)
+ *   deletesprite <nom>
+ * @param {object} node directive node {text}
+ * @param {?string} spriteName current target name
+ * @returns {?object} action
+ */
+const parseSpriteDirective = (node, spriteName) => {
+    const line = String(node.text || '').trim()
+        .replace(/:\s*$/, '');
+    const keyword = line.split(/\s+/)[0].toLowerCase();
+    if (!SPRITE_KEYWORDS.has(keyword)) return null;
+
+    const rest = line.slice(keyword.length).trim();
+    const unquote = value => String(value).trim()
+        .replace(/^["']|["']$/g, '');
+
+    if (keyword === 'deletesprite' || keyword === 'removesprite') {
+        const name = unquote(rest);
+        if (!name) return null;
+        return {type: 'DELETE_SPRITE', name};
+    }
+
+    const eqIdx = rest.indexOf('=');
+    if (eqIdx === -1) {
+        // `on Balle:` + `renamesprite Raquette` -> rename the current sprite.
+        const name = unquote(rest);
+        if (!name || !spriteName) return null;
+        return {type: 'RENAME_SPRITE', sprite: spriteName, name};
+    }
+    const from = unquote(rest.slice(0, eqIdx));
+    const to = unquote(rest.slice(eqIdx + 1));
+    if (!from || !to) return null;
+    return {type: 'RENAME_SPRITE', sprite: from, name: to};
+};
+
+/**
+ * Tells whether a node is a sprite-management directive.
+ * @param {object} node DSL node
+ * @returns {boolean} true when the line renames or deletes a sprite
+ */
+const isSpriteDirective = node => {
+    const line = String(node.text || '').trim();
+    return SPRITE_KEYWORDS.has(line.split(/\s+/)[0].toLowerCase());
+};
+
+/**
+ * Keywords that introduce a costume directive rather than a block.
+ * `costume` is ambiguous: `costume "visage"` is the switch-costume block, while
+ * `costume "visage" = <svg .../>` draws a new costume. `isCostumeDirective`
+ * tells the two apart so the existing block keeps working.
+ * @type {Set<string>}
+ */
+const COSTUME_KEYWORDS = new Set(['costume', 'renamecostume', 'deletecostume', 'setcostume', 'switchcostume']);
+
+/**
+ * Tells whether a node is a costume directive (as opposed to the
+ * `looks_switchcostumeto` block, which shares the `costume` keyword).
+ * @param {object} node DSL node
+ * @returns {boolean} true when the line draws/renames/deletes a costume
+ */
+const isCostumeDirective = node => {
+    const line = String(node.text || '').trim();
+    const keyword = line.split(/\s+/)[0].toLowerCase();
+    if (!COSTUME_KEYWORDS.has(keyword)) return false;
+    if (keyword !== 'costume') return true;
+    return line.indexOf('=') !== -1;
+};
+
+/**
+ * Flattens a subtree back into its source lines, in document order.
+ * An SVG written under a `costume` directive is indented, so `buildTree` turns
+ * it into a tree: `<svg>` is the child, its shapes are grandchildren. Every
+ * level has to be read back, otherwise the drawing loses its content.
+ * @param {Array<object>} nodes DSL nodes
+ * @returns {Array<string>} lines
+ */
+const flattenNodeLines = nodes => {
+    const lines = [];
+    for (const node of nodes || []) {
+        lines.push(node.text);
+        if (node.children && node.children.length) {
+            lines.push(...flattenNodeLines(node.children));
+        }
+    }
+    return lines;
+};
+
+/**
+ * Parses a costume directive node into an action.
+ * Supported forms:
+ *   costume <nom> = <svg .../>          (SVG inline, or indented on the lines below)
+ *   costume <nom> = circle #ff0000      (preset shape)
+ *   renamecostume <ancien> = <nouveau>
+ *   deletecostume <nom>
+ *   setcostume <nom>
+ * @param {object} node directive node {text, children}
+ * @param {?string} spriteName current target name
+ * @returns {?object} action
+ */
+const parseCostumeDirective = (node, spriteName) => {
+    const line = String(node.text || '').trim()
+        .replace(/:\s*$/, '');
+    const keyword = line.split(/\s+/)[0].toLowerCase();
+    if (!COSTUME_KEYWORDS.has(keyword)) return null;
+
+    const rest = line.slice(keyword.length);
+    const unquote = value => String(value).trim()
+        .replace(/^["']|["']$/g, '');
+    const withSprite = action => {
+        if (spriteName) action.sprite = spriteName;
+        return action;
+    };
+    // An SVG is often too long for one line: the indented lines are its body.
+    const indentedBody = flattenNodeLines(node.children).join('\n');
+
+    if (keyword === 'costume') {
+        const eqIdx = rest.indexOf('=');
+        if (eqIdx === -1) return null; // plain switch-costume block, not a directive
+        const name = unquote(rest.slice(0, eqIdx));
+        const inline = rest.slice(eqIdx + 1).trim();
+        const source = [inline, indentedBody].filter(Boolean).join('\n')
+            .trim();
+        if (!source) return null;
+
+        // `costume balle = circle #FFAB19` -> preset shape instead of raw SVG.
+        const preset = source.match(/^([a-z]+)(\s+(#[0-9a-fA-F]{3,8}))?$/);
+        if (preset && SHAPES[preset[1].toLowerCase()]) {
+            const action = {type: 'CREATE_COSTUME', shape: preset[1].toLowerCase()};
+            if (name) action.name = name;
+            if (preset[3]) action.color = preset[3];
+            return withSprite(action);
+        }
+        const svgAction = {type: 'CREATE_COSTUME', svg: source};
+        if (name) svgAction.name = name;
+        return withSprite(svgAction);
+    }
+
+    if (keyword === 'renamecostume') {
+        const eqIdx = rest.indexOf('=');
+        if (eqIdx === -1) return null;
+        const from = unquote(rest.slice(0, eqIdx));
+        const to = unquote(rest.slice(eqIdx + 1));
+        if (!from || !to) return null;
+        return withSprite({type: 'RENAME_COSTUME', costume: from, name: to});
+    }
+
+    if (keyword === 'deletecostume') {
+        const name = unquote(rest);
+        if (!name) return null;
+        return withSprite({type: 'DELETE_COSTUME', costume: name});
+    }
+
+    // setcostume / switchcostume
+    const name = unquote(rest);
+    if (!name) return null;
+    return withSprite({type: 'SET_COSTUME', costume: name});
+};
 
 /**
  * Parses a single edit-directive node into an action, or returns null if the
@@ -615,6 +830,14 @@ const emitScripts = (spriteName, bodyNodes, actions) => {
             flushScripts();
             const editAction = parseEditDirective(node, spriteName);
             if (editAction) actions.push(editAction);
+        } else if (isCostumeDirective(node)) {
+            flushScripts();
+            const costumeAction = parseCostumeDirective(node, spriteName);
+            if (costumeAction) actions.push(costumeAction);
+        } else if (isSpriteDirective(node)) {
+            flushScripts();
+            const spriteAction = parseSpriteDirective(node, spriteName);
+            if (spriteAction) actions.push(spriteAction);
         } else {
             scriptBuffer.push(node);
         }
@@ -740,6 +963,16 @@ const parseDSL = text => {
                 flushPending();
                 const editAction = parseEditDirective(node, currentSprite);
                 if (editAction) actions.push(editAction);
+            } else if (isCostumeDirective(node)) {
+                // Top-level costume directive (draws / renames a costume).
+                flushPending();
+                const costumeAction = parseCostumeDirective(node, currentSprite);
+                if (costumeAction) actions.push(costumeAction);
+            } else if (isSpriteDirective(node)) {
+                // Top-level sprite directive (renames / deletes a sprite).
+                flushPending();
+                const spriteAction = parseSpriteDirective(node, currentSprite);
+                if (spriteAction) actions.push(spriteAction);
             } else {
                 // A bare block line at the top level: accumulate into a script
                 // for the current sprite (or the editing target when none).

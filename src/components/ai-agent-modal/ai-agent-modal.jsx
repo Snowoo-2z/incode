@@ -10,7 +10,7 @@ class AIAgentModalComponent extends React.Component {
     constructor (props) {
         super(props);
         this.state = {
-            activeTab: 'assistant', // 'assistant' | 'cli' | 'inspector'
+            activeTab: 'assistant', // 'assistant' | 'agent'
             userGoal: 'Créer un jeu de Pong à 2 joueurs : Paddle1 (touches W/S), Paddle2 (flèches Haut/Bas), une balle qui rebondit et compte les scores.',
             aiCodeInput: '',
             executionLogs: [
@@ -21,21 +21,36 @@ class AIAgentModalComponent extends React.Component {
                 'Ou cliquez sur "Charger Pong Démo" pour tester immédiatement !'
             ],
             promptCopied: false,
+            followUpCopied: false,
             reportCopied: false,
-            cliInput: '',
-            cliLogs: [
-                'Terminal Scratch CLI initialisé.',
-                'Tapez "help" pour voir les commandes disponibles.'
+            // --- Mode agent : l'IA explore le projet elle-même avec des outils.
+            agentGoal: '',
+            agentResponse: '',
+            agentLogs: [
+                '🛰️ Mode agent — pensé pour les GROS projets.',
+                'L\'IA ne reçoit qu\'un aperçu du projet (une ligne par sprite).',
+                'Elle demande ce dont elle a besoin : /list, /read <sprite>, /vars, /search <mot>.',
+                'Collez sa réponse ci-dessous : les outils sont exécutés, le code est appliqué,',
+                'puis un texte « à renvoyer dans la même conversation » vous est proposé.'
             ],
+            agentOverview: '',
+            agentFollowUp: '',
+            agentCopied: false,
+            agentPromptCopied: false,
+            agentBusy: false,
             targets: []
         };
 
         this.handleCopyPrompt = this.handleCopyPrompt.bind(this);
+        this.handleCopyFollowUp = this.handleCopyFollowUp.bind(this);
         this.handleExecute = this.handleExecute.bind(this);
         this.handleLoadPong = this.handleLoadPong.bind(this);
         this.handleCopyReport = this.handleCopyReport.bind(this);
-        this.handleCliKeyDown = this.handleCliKeyDown.bind(this);
+        this.handleCopyAgentPrompt = this.handleCopyAgentPrompt.bind(this);
+        this.handleRunAgentTurn = this.handleRunAgentTurn.bind(this);
+        this.handleCopyAgentFollowUp = this.handleCopyAgentFollowUp.bind(this);
         this.refreshTargets = this.refreshTargets.bind(this);
+        this.refreshOverview = this.refreshOverview.bind(this);
     }
 
     componentDidMount () {
@@ -43,6 +58,7 @@ class AIAgentModalComponent extends React.Component {
             AIAgent.setVM(this.props.vm);
         }
         this.refreshTargets();
+        this.refreshOverview();
     }
 
     refreshTargets () {
@@ -51,15 +67,44 @@ class AIAgentModalComponent extends React.Component {
         });
     }
 
-    async handleCopyPrompt () {
-        const prompt = AIAgent.generatePrompt(this.state.userGoal);
+    /** Refreshes the light overview shown in the agent tab. */
+    refreshOverview () {
+        this.setState({agentOverview: AIAgent.getProjectOverview()});
+    }
+
+    /**
+     * Copies a prompt to the clipboard and flashes the button that asked for it.
+     * @param {string} text prompt to copy
+     * @param {string} stateKey state flag driving the "✓ copié" label
+     * @param {string} label fallback message when the clipboard is unavailable
+     * @returns {Promise<void>} resolves once the copy attempt is done
+     */
+    async copyPrompt (text, stateKey, label) {
         try {
-            await navigator.clipboard.writeText(prompt);
-            this.setState({promptCopied: true});
-            setTimeout(() => this.setState({promptCopied: false}), 2500);
+            await navigator.clipboard.writeText(text);
+            this.setState({[stateKey]: true});
+            setTimeout(() => this.setState({[stateKey]: false}), 2500);
         } catch (e) {
-            alert('Prompt généré (copie manuelle) :\n' + prompt.substring(0, 300) + '...');
+            alert(`${label} (copie manuelle) :\n${text.substring(0, 300)}...`);
         }
+    }
+
+    /** Full prompt: documentation + project state. First message of a chat. */
+    async handleCopyPrompt () {
+        await this.copyPrompt(
+            AIAgent.generatePrompt(this.state.userGoal),
+            'promptCopied',
+            'Prompt « nouvelle conversation » généré'
+        );
+    }
+
+    /** Short prompt: project state only, for an ongoing chat (no docs). */
+    async handleCopyFollowUp () {
+        await this.copyPrompt(
+            AIAgent.generateContinuationPrompt(this.state.userGoal),
+            'followUpCopied',
+            'Prompt « suite de la conversation » généré'
+        );
     }
 
     async handleExecute () {
@@ -91,114 +136,76 @@ class AIAgentModalComponent extends React.Component {
     }
 
     async handleCopyReport () {
-        const followUp = AIAgent.generateFollowUpPrompt('Tout a été exécuté. Quelles sont les prochaines améliorations ?');
-        try {
-            await navigator.clipboard.writeText(followUp);
-            this.setState({reportCopied: true});
-            setTimeout(() => this.setState({reportCopied: false}), 2500);
-        } catch (e) {
-            alert('Rapport copié !');
-        }
+        await this.copyPrompt(
+            AIAgent.generateContinuationPrompt(
+                'Voici le résultat de l\'exécution. Corrige ce qui a échoué, puis propose les prochaines améliorations.'
+            ),
+            'reportCopied',
+            'Rapport copié'
+        );
     }
 
-    async handleCliKeyDown (e) {
-        if (e.key !== 'Enter') return;
-        const cmdText = this.state.cliInput.trim();
-        if (!cmdText) return;
+    /** Agent mode: documentation + light overview + the tools it may call. */
+    async handleCopyAgentPrompt () {
+        const goal = this.state.agentGoal.trim() || this.state.userGoal;
+        await this.copyPrompt(
+            AIAgent.generateAgentPrompt(goal),
+            'agentPromptCopied',
+            'Prompt agent généré'
+        );
+    }
 
-        const newLogs = [...this.state.cliLogs, `> ${cmdText}`];
-        this.setState({cliInput: ''});
-
-        const parts = cmdText.split(/\s+/);
-        const cmd = parts[0].toLowerCase();
-
-        switch (cmd) {
-        case 'help':
-            newLogs.push(
-                'Commandes disponibles :',
-                '  status               : Afficher le résumé complet du projet',
-                '  read <sprite>        : Lire les scripts et propriétés d\'un sprite',
-                '  create-sprite <nom>  : Créer un nouveau sprite',
-                '  create-var <nom>     : Créer une variable globale',
-                '  clear <sprite>       : Supprimer les blocs d\'un sprite',
-                '  pong                 : Générer le jeu Pong complet',
-                '  clear-console        : Vider l\'affichage du terminal',
-                '',
-                'Astuce : pour coller du code ScratchScript ou JSON multi-lignes,',
-                'utilisez l\'onglet « Assistant IA » (zone « Collez la réponse de l\'IA »).'
-            );
-            break;
-
-        case 'clear-console':
-            this.setState({cliLogs: []});
+    /**
+     * Runs one agent turn: the `/…` tool calls are executed, the rest of the
+     * answer is applied as ScratchScript/JSON, and the follow-up prompt is
+     * shown so the user can paste it back in the same conversation.
+     * @returns {Promise<void>} resolves when the turn is done
+     */
+    async handleRunAgentTurn () {
+        const response = this.state.agentResponse;
+        if (!response.trim()) {
+            this.setState({
+                agentLogs: [...this.state.agentLogs, '⚠ Collez d\'abord la réponse de l\'IA.']
+            });
             return;
-
-        case 'status':
-            newLogs.push(AIAgent.getProjectSummary());
-            break;
-
-        case 'read':
-            if (!parts[1]) {
-                newLogs.push('Usage: read <nom_sprite>');
-            } else {
-                const sp = AIAgent.readSprite(parts[1]);
-                if (!sp) {
-                    newLogs.push(`Sprite "${parts[1]}" introuvable.`);
-                } else {
-                    newLogs.push(
-                        `Sprite "${sp.name}" : x=${sp.x}, y=${sp.y}, direction=${sp.direction}, taille=${sp.size}%`,
-                        `Scripts (${sp.scripts.length}) :`,
-                        ...sp.scripts.map((s, i) => `[Script ${i + 1}]\n${s.text}`)
-                    );
-                }
-            }
-            break;
-
-        case 'create-sprite':
-            if (!parts[1]) {
-                newLogs.push('Usage: create-sprite <nom>');
-            } else {
-                const rep = await AIAgent.execute(`CREATE_SPRITE ${parts[1]}`);
-                newLogs.push(...rep.logs);
-                this.refreshTargets();
-            }
-            break;
-
-        case 'create-var':
-            if (!parts[1]) {
-                newLogs.push('Usage: create-var <nom>');
-            } else {
-                const rep = await AIAgent.execute(`CREATE_VAR ${parts[1]}`);
-                newLogs.push(...rep.logs);
-                this.refreshTargets();
-            }
-            break;
-
-        case 'clear':
-            if (!parts[1]) {
-                newLogs.push('Usage: clear <nom_sprite>');
-            } else {
-                const rep = await AIAgent.execute(`CLEAR_BLOCKS ${parts[1]}`);
-                newLogs.push(...rep.logs);
-                this.refreshTargets();
-            }
-            break;
-
-        case 'pong':
-            newLogs.push('Création du jeu de Pong...');
-            {
-                const rep = await AIAgent.execute(JSON.stringify({ actions: PONG_GAME_TEMPLATE.actions }));
-                newLogs.push(...rep.logs);
-                this.refreshTargets();
-            }
-            break;
-
-        default:
-            newLogs.push(`Commande inconnue : "${cmd}". Tapez "help" pour la liste des commandes.`);
-            break;
         }
 
-        this.setState({cliLogs: newLogs});
+        this.setState({agentBusy: true});
+        const turn = await AIAgent.runAgentTurn(response);
+        this.setState({agentBusy: false});
+
+        const logs = [...this.state.agentLogs];
+        logs.push(`\n--- Tour ${logs.filter(l => l.startsWith('\n--- Tour')).length + 1} ---`);
+        if (turn.requests.length) {
+            logs.push(`🔎 ${turn.requests.length} outil(s) demandé(s) : ` +
+                turn.requests.map(r => r.raw).join(' | '));
+            logs.push(...turn.answers);
+        } else {
+            logs.push('🔎 Aucun outil demandé.');
+        }
+        if (turn.unknown.length) {
+            logs.push(`⚠ Commande(s) inconnue(s) ignorée(s) : ${turn.unknown.join(' | ')}`);
+        }
+        if (turn.report) {
+            logs.push(...turn.report.logs);
+        } else {
+            logs.push('ℹ Aucun code à exécuter dans cette réponse.');
+        }
+        logs.push('👉 Copiez le texte ci-dessous et renvoyez-le à l\'IA dans la même conversation.');
+
+        // The box is emptied so the NEXT paste is clean: leaving the previous
+        // answer in place would re-run its /read and re-apply its code.
+        this.setState({agentLogs: logs, agentFollowUp: turn.followUp, agentResponse: ''});
+        this.refreshTargets();
+        this.refreshOverview();
+    }
+
+    async handleCopyAgentFollowUp () {
+        await this.copyPrompt(
+            this.state.agentFollowUp,
+            'agentCopied',
+            'Réponse à renvoyer à l\'IA'
+        );
     }
 
     renderAssistantTab () {
@@ -213,8 +220,11 @@ class AIAgentModalComponent extends React.Component {
                         </div>
                     </div>
                     <p className={styles.sectionDesc}>
-                        Le terminal analyse l'état de votre projet Scratch et génère un prompt complet
-                        contenant les instructions précises pour ChatGPT ou Claude.
+                        {'Le terminal analyse l\'état de votre projet Scratch et génère le prompt à coller dans ' +
+                            'ChatGPT ou Claude. Deux modes : « Nouvelle conversation » envoie toute la ' +
+                            'documentation (comment coder, costumes SVG, éditions ciblées) plus l\'état du projet — ' +
+                            'c\'est le premier message. « Suite de la conversation » n\'envoie que l\'état actuel du ' +
+                            'projet, pour ne pas renvoyer la documentation à chaque tour.'}
                     </p>
                     <textarea
                         className={styles.textarea}
@@ -225,10 +235,30 @@ class AIAgentModalComponent extends React.Component {
                     />
                     <div className={styles.buttonRow}>
                         <button
-                            className={classNames(styles.actionBtn, this.state.promptCopied ? styles.successBtn : styles.primaryBtn)}
+                            className={classNames(
+                                styles.actionBtn,
+                                this.state.promptCopied ? styles.successBtn : styles.primaryBtn
+                            )}
                             onClick={this.handleCopyPrompt}
+                            title={'Prompt complet : la documentation du langage + l\'état du projet. ' +
+                                'À utiliser comme PREMIER message d\'une conversation.'}
                         >
-                            {this.state.promptCopied ? '✓ Prompt copié dans le presse-papier !' : '📋 Copier le prompt pour l\'IA'}
+                            {this.state.promptCopied ?
+                                '✓ Prompt complet copié !' :
+                                '🆕 Nouvelle conversation (doc + projet)'}
+                        </button>
+                        <button
+                            className={classNames(
+                                styles.actionBtn,
+                                this.state.followUpCopied ? styles.successBtn : styles.secondaryBtn
+                            )}
+                            onClick={this.handleCopyFollowUp}
+                            title={'Prompt court : uniquement l\'état actuel du projet, sans la documentation. ' +
+                                'À utiliser dans une conversation déjà commencée.'}
+                        >
+                            {this.state.followUpCopied ?
+                                '✓ État du projet copié !' :
+                                '💬 Suite de la conversation (état du projet)'}
                         </button>
                         <button
                             className={classNames(styles.actionBtn, styles.templateBtn)}
@@ -299,90 +329,142 @@ class AIAgentModalComponent extends React.Component {
         );
     }
 
-    renderCliTab () {
-        return (
-            <div className={styles.cliContainer}>
-                <div className={styles.cliToolbar}>
-                    <span className={classNames(styles.cliDot, styles.cliDotRed)} />
-                    <span className={classNames(styles.cliDot, styles.cliDotYellow)} />
-                    <span className={classNames(styles.cliDot, styles.cliDotGreen)} />
-                    <span className={styles.cliToolbarTitle}>{'scratch-cli — bash'}</span>
-                </div>
-                <div className={styles.cliOutput}>
-                    {this.state.cliLogs.join('\n')}
-                </div>
-                <div className={styles.cliInputRow}>
-                    <span className={styles.cliPromptSymbol}>&gt;</span>
-                    <input
-                        className={styles.cliInput}
-                        type="text"
-                        value={this.state.cliInput}
-                        onChange={e => this.setState({cliInput: e.target.value})}
-                        onKeyDown={this.handleCliKeyDown}
-                        placeholder="Tapez une commande (ex: help, status, read Sprite1, create-sprite Paddle1, pong)..."
-                        autoFocus
-                    />
-                </div>
-            </div>
-        );
-    }
+    renderAgentTab () {
+        const hasFollowUp = Boolean(this.state.agentFollowUp);
 
-    renderInspectorTab () {
         return (
-            <div className={styles.section}>
-                <div className={styles.sectionHeader}>
-                    <div className={styles.sectionTitle}>
-                        <span>Inspecteur des Sprites du Projet ({this.state.targets.length})</span>
+            <React.Fragment>
+                {/* Step 1: goal + what the AI will actually receive */}
+                <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                        <div className={styles.sectionTitle}>
+                            <span className={styles.stepNumber}>{'1'}</span>
+                            <span>Objectif de l'agent</span>
+                        </div>
+                        <button
+                            className={classNames(styles.actionBtn, styles.secondaryBtn)}
+                            onClick={this.refreshOverview}
+                            title="Relit le projet et met à jour l'aperçu envoyé à l'IA"
+                        >
+                            🔄 Aperçu
+                        </button>
                     </div>
-                    <button
-                        className={classNames(styles.actionBtn, styles.secondaryBtn)}
-                        onClick={this.refreshTargets}
-                    >
-                        🔄 Rafraîchir
-                    </button>
+                    <p className={styles.sectionDesc}>
+                        {'Ici l\'IA ne reçoit PAS le code du projet, seulement l\'aperçu ci-dessous : elle demande ' +
+                            'elle-même les sprites dont elle a besoin avec /read. Idéal quand le projet est trop ' +
+                            'gros pour tenir dans un seul prompt.'}
+                    </p>
+                    <textarea
+                        className={styles.textarea}
+                        rows={3}
+                        value={this.state.agentGoal}
+                        onChange={e => this.setState({agentGoal: e.target.value})}
+                        placeholder="Ex: Le score ne s'incrémente pas quand la balle touche la raquette — trouve et corrige le bug."
+                    />
+                    <div className={styles.overviewBox}>
+                        {this.state.agentOverview || 'Aucun sprite dans le projet.'}
+                    </div>
+                    <div className={styles.buttonRow}>
+                        <button
+                            className={classNames(
+                                styles.actionBtn,
+                                this.state.agentPromptCopied ? styles.successBtn : styles.primaryBtn
+                            )}
+                            onClick={this.handleCopyAgentPrompt}
+                            title={'Prompt agent : documentation du langage + aperçu du projet + outils ' +
+                                '/list, /read, /vars, /search. À utiliser comme PREMIER message.'}
+                        >
+                            {this.state.agentPromptCopied ?
+                                '✓ Prompt agent copié !' :
+                                '🛰️ Copier le prompt agent (contexte léger)'}
+                        </button>
+                    </div>
                 </div>
-                {this.state.targets.length === 0 ? (
-                    <div className={styles.emptyState}>
-                        <span className={styles.emptyStateIcon}>{'📭'}</span>
-                        <span>{'Aucun sprite pour le moment. Créez-en un ou chargez un projet.'}</span>
+
+                {/* Step 2: paste the answer, run its tools + its code */}
+                <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                        <div className={styles.sectionTitle}>
+                            <span className={styles.stepNumber}>{'2'}</span>
+                            <span>Collez la réponse de l'IA</span>
+                        </div>
                     </div>
-                ) : (
-                    <div className={styles.spriteList}>
-                        {this.state.targets.map(t => (
-                            <div key={t.id} className={styles.spriteCard}>
-                                <div className={styles.spriteCardHeader}>
-                                    <span>{t.isStage ? '🎭 Scène' : `🐱 ${t.name}`}</span>
-                                    <span className={styles.badge}>{t.scripts.length} script(s) · {t.blocksCount} blocs</span>
-                                </div>
-                                {!t.isStage && (
-                                    <div className={styles.spriteMeta}>
-                                        <span className={styles.metaChip}>{`x: ${t.x}`}</span>
-                                        <span className={styles.metaChip}>{`y: ${t.y}`}</span>
-                                        <span className={styles.metaChip}>{`Taille: ${t.size}%`}</span>
-                                        <span className={styles.metaChip}>{`Direction: ${t.direction}°`}</span>
-                                    </div>
-                                )}
-                                {t.variables.length > 0 && (
-                                    <div className={styles.spriteMeta}>
-                                        {t.variables.map(v => (
-                                            <span key={v.name} className={styles.metaChip}>{`${v.name} = ${v.value}`}</span>
-                                        ))}
-                                    </div>
-                                )}
-                                {t.scripts.length > 0 ? (
-                                    t.scripts.map((s, idx) => (
-                                        <div key={idx} className={styles.scriptPreview}>
-                                            {`// Script ${idx + 1} à (x: ${s.x}, y: ${s.y})\n${s.text}`}
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className={styles.scriptEmpty}>{'Aucun script sur ce sprite.'}</div>
-                                )}
+                    <p className={styles.sectionDesc}>
+                        {'La réponse peut contenir des outils (/read Balle, /vars, /search rebond...) et du code. ' +
+                            'Les outils sont exécutés, le code est appliqué au projet.'}
+                    </p>
+                    <textarea
+                        className={classNames(styles.textarea, styles.textareaCode)}
+                        rows={6}
+                        value={this.state.agentResponse}
+                        onChange={e => this.setState({agentResponse: e.target.value})}
+                        placeholder={'Collez ici la réponse de l\'IA.\nExemple :\n/read Balle\n/vars\n```scratch\non Balle:\n  edit 1/3.1 move 25\n```'}
+                    />
+                    <div className={styles.buttonRow}>
+                        <button
+                            className={classNames(styles.actionBtn, styles.primaryBtn)}
+                            onClick={this.handleRunAgentTurn}
+                            disabled={this.state.agentBusy}
+                        >
+                            {this.state.agentBusy ?
+                                '⏳ Exécution en cours…' :
+                                '▶ Exécuter les outils + le code'}
+                        </button>
+                        <button
+                            className={classNames(styles.actionBtn, styles.secondaryBtn)}
+                            onClick={() => this.setState({agentResponse: ''})}
+                        >
+                            Effacer
+                        </button>
+                    </div>
+                </div>
+
+                {/* Step 3: what the tools answered */}
+                <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                        <div className={styles.sectionTitle}>
+                            <span className={styles.stepNumber}>{'3'}</span>
+                            <span>Journal de l'agent</span>
+                        </div>
+                    </div>
+                    <div className={styles.terminalBox}>
+                        {this.state.agentLogs.join('\n')}
+                    </div>
+                </div>
+
+                {/* Step 4: the loop — send this back in the SAME conversation */}
+                {hasFollowUp && (
+                    <div className={classNames(styles.section, styles.followUpSection)}>
+                        <div className={styles.sectionHeader}>
+                            <div className={styles.sectionTitle}>
+                                <span className={styles.stepNumber}>{'4'}</span>
+                                <span>Envoyer ceci à l'IA dans la même conversation</span>
                             </div>
-                        ))}
+                        </div>
+                        <p className={styles.sectionDesc}>
+                            {'Copiez ce texte et collez-le à la suite de la conversation déjà ouverte : il contient ' +
+                                'les réponses aux outils demandés et l\'état du projet après exécution.'}
+                        </p>
+                        <div className={styles.followUpBox}>
+                            {this.state.agentFollowUp}
+                        </div>
+                        <div className={styles.buttonRow}>
+                            <button
+                                className={classNames(
+                                    styles.actionBtn,
+                                    this.state.agentCopied ? styles.successBtn : styles.primaryBtn
+                                )}
+                                onClick={this.handleCopyAgentFollowUp}
+                                title="Copie le texte à renvoyer à l'IA dans la même conversation"
+                            >
+                                {this.state.agentCopied ?
+                                    '✓ Copié ! Collez-le chez l\'IA' :
+                                    '📋 Copier la réponse à renvoyer à l\'IA'}
+                            </button>
+                        </div>
                     </div>
                 )}
-            </div>
+            </React.Fragment>
         );
     }
 
@@ -398,7 +480,8 @@ class AIAgentModalComponent extends React.Component {
                     <div className={styles.headerText}>
                         <span className={styles.headerTitle}>{'Votre assistant de code Scratch'}</span>
                         <span className={styles.headerSubtitle}>
-                            {'Générez un prompt, exécutez la réponse de l\'IA et inspectez vos sprites.'}
+                            {'Générez un prompt, exécutez la réponse de l\'IA — ou laissez l\'agent explorer ' +
+                                `le projet (${this.state.targets.length} cible(s)).`}
                         </span>
                     </div>
                 </div>
@@ -415,29 +498,17 @@ class AIAgentModalComponent extends React.Component {
                         </button>
                         <button
                             className={classNames(styles.tabButton, {
-                                [styles.tabActive]: this.state.activeTab === 'cli'
+                                [styles.tabActive]: this.state.activeTab === 'agent'
                             })}
-                            onClick={() => this.setState({activeTab: 'cli'})}
+                            onClick={() => this.setState({activeTab: 'agent'})}
                         >
-                            {'💻 Console CLI'}
-                        </button>
-                        <button
-                            className={classNames(styles.tabButton, {
-                                [styles.tabActive]: this.state.activeTab === 'inspector'
-                            })}
-                            onClick={() => {
-                                this.setState({activeTab: 'inspector'});
-                                this.refreshTargets();
-                            }}
-                        >
-                            {'🔍 Inspecteur'}
+                            {'🛰️ Mode agent (gros projets)'}
                         </button>
                     </div>
 
                     {/* Tab Content */}
                     {this.state.activeTab === 'assistant' && this.renderAssistantTab()}
-                    {this.state.activeTab === 'cli' && this.renderCliTab()}
-                    {this.state.activeTab === 'inspector' && this.renderInspectorTab()}
+                    {this.state.activeTab === 'agent' && this.renderAgentTab()}
                 </div>
             </ModalComponent>
         );
