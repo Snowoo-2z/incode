@@ -204,15 +204,25 @@ const DSL_LANGUAGE_RULES = `Règles du langage :
 - L'IMBRICATION se fait par l'INDENTATION (2 espaces). Les blocs C (boucles, si) se terminent par \`:\` et leur contenu est indenté en dessous.
 - Un bloc rapporteur ou une condition s'écrit entre parenthèses : \`(random 1 10)\`, \`(touching _edge_)\`, \`(> (timer) 5)\`.
 - Le texte va entre guillemets : \`say "Bonjour"\`.
-- Une valeur de menu EN PLUSIEURS MOTS va entre guillemets : \`stop "other scripts in sprite"\`,
-  \`costume "Incomming call"\`, \`whenkey "up arrow"\` — sinon seul le premier mot est pris.
+- Un NOM EN PLUSIEURS MOTS (sprite, variable, liste, costume, son, message, valeur de menu)
+  s'écrit ENTRE GUILLEMETS, partout : les arguments sont séparés par des espaces.
+    sprite "Ma Balle" 0 0:      on "Ma Balle":          clear "Ma Balle"
+    var "mon score" = 0         list "ma liste" = a, b  renamesprite "Ma Balle" = "Ma Raquette"
+    set "mon score" 1           change "mon score" 1    additem 5 "ma liste"
+    costume "visage joyeux"     switchbackdrop "nuit étoilée"   whenkey "up arrow"
+    stop "other scripts in sprite"      of "x position" "Ma Balle"
+  Sans guillemets, le parseur recolle les mots d'un bloc à UNE seule valeur
+  (\`goto Ma Balle\`, \`say Bonjour le monde\`) et d'un nom de variable ou de liste
+  (\`set mon score 1\`), mais dès que deux arguments peuvent contenir des espaces
+  (\`of x position Ma Balle\`) lui seul ne peut pas deviner : mets les guillemets.
+  Dans un calcul, une variable à espaces s'écrit \`(var "mon score")\`.
 - Un MOT NU est une VARIABLE, pas du texte : \`set py (+ py 1)\` additionne la variable \`py\`
   (sinon Scratch affiche le texte « py + 1 » et calcule 0 + 1). Guillemets = texte littéral.
 - Une valeur entre guillemets reste du TEXTE même si elle ne contient que des chiffres :
   \`var carte = "110100..."\` crée bien une chaîne, indispensable pour \`letterof\`.
 - Déclarations :
-  * \`var nom = valeur\`        -> crée une variable globale
-  * \`list nom = a, b, c\`      -> crée une liste globale
+  * \`var nom = valeur\`        -> crée une variable globale (\`var "mon score" = 0\` si le nom a des espaces)
+  * \`list nom = a, b, c\`      -> crée une liste globale (\`list "ma liste" = a, b\`)
   * \`sprite Nom x y:\`         -> crée/sélectionne un sprite (x y optionnels), ses scripts sont indentés dessous
   * \`stage:\`                  -> cible la scène
   * \`clear Nom\`               -> efface les blocs d'un sprite
@@ -242,6 +252,7 @@ const TARGETED_EDITS_DOC = `ÉDITIONS CIBLÉES (IMPORTANT pour modifier un proje
 Dans l'état du projet ci-dessus, chaque bloc est précédé de son ADRESSE entre crochets, ex. \`[1/3.1]\`. Le format est \`script/chemin\` : le numéro de script, puis la position du bloc dans sa pile, en descendant dans les blocs C avec des points (la branche « sinon » est notée \`~2\`). Ex. : \`2/4.2.1\` = script 2, 4e bloc, 2e bloc de son corps, 1er bloc du corps de celui-ci.
 Pour retoucher un projet, PRÉFÈRE ces directives plutôt que régénérer un sprite entier :
   on <Sprite>:            -> sélectionne un sprite EXISTANT (n'en crée pas), puis indente les directives dessous
+                             (nom avec espaces entre guillemets : \`on "Ma Balle":\`)
     edit <adr> <bloc args>       -> remplace les valeurs/opcode d'un bloc existant. Ex: edit 1/3.1 move 25
     delete <adr>                 -> supprime un bloc (et son contenu s'il est C)
     insert after <adr>:          -> insère les blocs indentés APRÈS le bloc
@@ -257,6 +268,8 @@ on Balle:
   insert after 1/2:
     say "Partie lancee"
   delete 1/3.2
+on "Ma Balle":
+  edit 2/1.1 set "mon score" 0
 \`\`\``;
 
 /** Closing rules. */
@@ -375,6 +388,9 @@ GESTION DES SPRITES ET DES COSTUMES :
   /costume <sprite> [<nom>]           -> LIT le code SVG d'un costume existant
   renamesprite <ancien> = <nouveau>   -> renomme un sprite (les blocs qui le citent sont mis à jour)
   clear <sprite>                      -> vide ses blocs
+Un nom de sprite, de costume ou de variable qui contient des ESPACES va entre guillemets,
+dans les outils comme dans le code : /read "Ma Balle", /costume "Ma Balle" "visage joyeux",
+on "Ma Balle":, set "mon score" 1.
 Pour MODIFIER un dessin existant : lis-le avec \`/costume\`, retouche les formes, puis renvoie
 \`costume "même nom" = <svg .../>\` — le costume de ce nom est remplacé, les autres sont conservés.
 En JSON : RENAME_SPRITE { sprite: "ancien", name: "nouveau" }, DELETE_SPRITE { name }.

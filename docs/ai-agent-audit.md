@@ -175,6 +175,55 @@ Points clés de l'implémentation :
   confiance et le pipeline complet DSL → blocs hydratés sans référence
   pendante.
 
+## Noms contenant des espaces — ajouté
+
+Les noms Scratch sont du texte libre : « Ma Balle », « mon score », « visage
+joyeux ». Or le DSL sépare les arguments avec des espaces : chaque position de
+nom du langage devait donc accepter un nom en plusieurs mots. Avant ce correctif,
+seul le premier mot était lu, ce qui produisait des dégâts silencieux :
+
+| Écrit par l'IA | Avant | Après |
+| --- | --- | --- |
+| `sprite "Ma Balle" 0 0:` | sprite `"Ma` | sprite `Ma Balle` en (0, 0) |
+| `on Ma Balle:` | cible `Ma` (bloc perdu / sprite fantôme) | cible `Ma Balle` |
+| `var "mon score" = 0` | variable `"mon score"` (guillemets inclus) | variable `mon score` |
+| `clear Ma Balle` | vide les blocs de `Ma` | vide ceux de `Ma Balle` |
+| `set mon score 1` | crée la variable `mon` et lui met le texte `score` | variable `mon score` = 1 |
+| `additem 5 ma liste` | crée une liste `ma` | ajoute 5 à `ma liste` |
+| `/costume "Ma Balle" "visage joyeux"` | sprite `Ma` introuvable | lit le bon costume |
+
+Règle retenue : **les guillemets partout où un nom peut contenir des espaces**,
+et le parseur recolle les mots quand le sens n'est pas ambigu.
+
+- **`dsl-parser.js`** : `readName` / `splitAssignment` lisent un nom guillemeté
+  ou nu en plusieurs mots pour `sprite`, `on`, `var`, `list`, `clear` (les
+  chiffres de fin restent les coordonnées). `mergeNameWords` rend leurs mots aux
+  noms non guillemets quand le bloc n'a **qu'un seul** paramètre de type nom
+  (`VARIABLE`, `LIST`, `TO`, `COSTUME`…) : les paramètres placés avant le nom
+  prennent leurs mots au début, ceux placés après les prennent à la fin. Les
+  nombres ne sont jamais absorbés (`set score 1 2` ne change pas) et un bloc à
+  deux noms possibles (`of <propriété> <objet>`) exige les guillemets. Un `=`
+  isolé (`set score = 5`) est ignoré au lieu de décaler les arguments.
+- **`agent-protocol.js`** : `splitQuoted` découpe les arguments des outils en
+  respectant les guillemets (`/read "Ma Balle"`,
+  `/costume "Ma Balle" "visage joyeux"`), et sans guillemets le plus long
+  préfixe de mots qui correspond à un sprite réel gagne
+  (`/costume Ma Balle visage`). Les exemples renvoyés à l'IA citent les noms
+  entre guillemets (`quoteName`).
+- **`sprite-reader.js`** : la liste adressée que l'IA recopie dans `edit …`
+  met entre guillemets toute valeur contenant un espace
+  (`VARIABLE="mon score"`), sinon le nom revenait cassé au tour suivant.
+- **`code-interpreter.js`** : les commandes héritées (`CREATE_SPRITE Ma Balle
+  0 0`, `CLEAR_BLOCKS "Ma Balle"`…) gardent le nom entier ; `CREATE_LIST`
+  demande des guillemets pour distinguer le nom des éléments.
+- **`prompt-generator.js`** : la grammaire envoyée à l'IA documente la règle,
+  avec les exemples ci-dessus, et rappelle `(var "mon score")` pour lire une
+  variable à espaces dans un calcul.
+- **Tests** : `test/unit/util/ai-agent-names-with-spaces.test.js` (27 tests)
+  couvre le parseur, le constructeur de blocs (la variable `mon score` est bien
+  résolue, pas recréée), les outils de l'agent, l'aller-retour liste adressée →
+  `edit`, et les commandes ligne-à-ligne.
+
 ## Limites connues (non bloquantes)
 
 - **Blocs personnalisés (My Blocks / `procedures_*`)** : non supportés. Ils

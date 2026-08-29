@@ -351,6 +351,19 @@ const readAllTargets = vm => {
 };
 
 /**
+ * Quotes a value of the addressed listing when it contains a space (or a
+ * quote). This listing is what the AI copies back into an `edit 1/3.1 ...`
+ * line, where arguments are separated by spaces: without the quotes,
+ * `VARIABLE=mon score` came back as the variable "mon" plus a stray "score".
+ * @param {any} value field / shadow value
+ * @returns {string} the value, quoted when it needs to be
+ */
+const quoteValue = value => {
+    const text = String(value === null || typeof value === 'undefined' ? '' : value);
+    return /[\s"']/.test(text) ? `"${text.replace(/"/g, '\\"')}"` : text;
+};
+
+/**
  * Renders a single hydrated block as a compact one-liner for the addressed
  * listing: "opcode arg=val arg=(reporter ...)". This is generic (reads the
  * block's own inputs/fields), so it never needs a per-opcode case and cannot
@@ -377,7 +390,7 @@ const renderBlockLine = (block, blocksMap) => {
         const shadow = shadowId ? blocksMap[shadowId] : null;
         if (shadow && shadow.fields) {
             const firstField = Object.values(shadow.fields)[0];
-            if (firstField) return String(firstField.value);
+            if (firstField) return quoteValue(firstField.value);
         }
         return '';
     };
@@ -387,7 +400,7 @@ const renderBlockLine = (block, blocksMap) => {
         parts.push(`${name}=${describeInput(input)}`);
     }
     for (const [name, field] of Object.entries(block.fields || {})) {
-        parts.push(`${name}=${field.value}`);
+        parts.push(`${name}=${quoteValue(field.value)}`);
     }
 
     return `${opcode}${parts.length ? ' ' + parts.join(' ') : ''}`;

@@ -341,6 +341,9 @@ const readValue = (str, start) => {
 
 /**
  * Parses an argument string into positional values and NAME=value pairs.
+ * A lone `=` is skipped: the AI often writes `set score = 5` and that sign
+ * carries no meaning here (real text is quoted), so treating it as a value
+ * used to push every following argument one slot to the right.
  * @param {string} str argument string
  * @returns {{positional: Array, named: object}} parsed arguments
  */
@@ -352,6 +355,10 @@ const parseArgs = str => {
     while (i < n) {
         while (i < n && /\s/.test(str[i])) i++;
         if (i >= n) break;
+        if (str[i] === '=' && (i + 1 >= n || /\s/.test(str[i + 1]))) {
+            i++;
+            continue;
+        }
         const rest = str.slice(i);
         const namedMatch = rest.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
         if (namedMatch) {
@@ -388,6 +395,62 @@ const wordText = v => (v && typeof v === 'object' && typeof v.__variable === 'st
     v.__variable : String(v);
 
 /**
+ * Parameters holding the NAME of something (variable, list, sprite, costume,
+ * message...) rather than a number or a piece of text. Scratch names are free
+ * text and very often contain spaces — "mon score", "Ma Balle", "up arrow" —
+ * while the DSL separates arguments with spaces, so a multi-word name has to be
+ * quoted (`set "mon score" 1`). When it is NOT quoted, the extra words used to be
+ * dropped silently and the block referenced a truncated name ("mon"), creating a
+ * bogus variable next to the real one. When exactly one parameter of the block is
+ * such a name, the surplus words are glued back onto it instead.
+ * @type {Set<string>}
+ */
+const NAME_PARAMS = new Set([
+    'VARIABLE', 'LIST', 'BROADCAST_OPTION', 'BROADCAST_INPUT',
+    'TO', 'TOWARDS', 'TOUCHINGOBJECTMENU', 'DISTANCETOMENU', 'CLONE_OPTION',
+    'COSTUME', 'BACKDROP', 'SOUND_MENU', 'KEY_OPTION', 'STOP_OPTION',
+    // `of <propriété> <objet>`: only OBJECT is listed, so a quoted property
+    // leaves the sprite name free to keep its spaces (`of "x position" Ma Balle`).
+    'OBJECT'
+]);
+
+/**
+ * Glues the words left over by a too-short parameter list back onto the single
+ * NAME parameter of the block, when there is exactly one and no ambiguity:
+ * the parameters placed BEFORE the name take their value from the front, those
+ * placed AFTER take theirs from the back, and everything in between is the name.
+ *   set mon score 1     -> VARIABLE "mon score", VALUE 1
+ *   additem 5 ma liste  -> ITEM 5, LIST "ma liste"
+ * Numbers are never absorbed (protects `set score 1 2`-style slop), and a block
+ * whose several parameters could all be names is left untouched: only quotes can
+ * lift that ambiguity.
+ * @param {Array<string>} order parameter names of the opcode
+ * @param {Array} positional positional values
+ * @returns {Array} positional values, with the name rebuilt when applicable
+ */
+const mergeNameWords = (order, positional) => {
+    if (positional.length <= order.length) return positional;
+    const nameIndexes = order
+        .map((param, index) => (NAME_PARAMS.has(param) ? index : -1))
+        .filter(index => index !== -1);
+    if (nameIndexes.length !== 1) return positional;
+
+    const nameIndex = nameIndexes[0];
+    const before = nameIndex;
+    const after = order.length - nameIndex - 1;
+    const middle = positional.slice(before, positional.length - after);
+    const joinable = middle.length > 1 &&
+        middle.every(v => isPlainWord(v) && typeof v !== 'number');
+    if (!joinable) return positional;
+
+    return [
+        ...positional.slice(0, before),
+        {__variable: middle.map(wordText).join(' ')},
+        ...(after ? positional.slice(positional.length - after) : [])
+    ];
+};
+
+/**
  * Assembles a block spec from an opcode and parsed arguments.
  * Every value is placed under `inputs`; the block-builder reroutes field-only
  * names (KEY_OPTION, VARIABLE, EFFECT, ...) to `fields` automatically.
@@ -412,6 +475,9 @@ const assembleSpec = (opcode, positional, named) => {
             !positional.some(v => typeof v === 'number') &&
             positional.every(isPlainWord)) {
         positional = [{__variable: positional.map(wordText).join(' ')}];
+    } else {
+        // Several parameters: an unquoted multi-word NAME keeps its words.
+        positional = mergeNameWords(order, positional);
     }
     let pi = 0;
     for (const param of order) {
@@ -579,6 +645,71 @@ const splitOutsideQuotes = str => {
 };
 
 /**
+ * Removes ONE pair of surrounding quotes from a name.
+ * Scratch names are free text, so the AI quotes the ones holding spaces — but a
+ * name is not a string literal: `var "mon score" = 0` must create a variable
+ * called `mon score`, not `"mon score"` with the quote characters in it.
+ * Inner quotes are kept (`he said "hi"`), only a clean pair is stripped.
+ * @param {any} value raw name
+ * @returns {string} the name without its surrounding quotes
+ */
+const unquoteName = value => {
+    const text = String(value === null || typeof value === 'undefined' ? '' : value).trim();
+    const quote = text[0];
+    if ((quote === '"' || quote === '\'') && text.length > 1 &&
+            text[text.length - 1] === quote && text.indexOf(quote, 1) === text.length - 1) {
+        return text.slice(1, -1);
+    }
+    return text;
+};
+
+/**
+ * Reads the NAME at the start of a directive: quoted ("Ma Balle") or bare and
+ * possibly written in several words (Ma Balle).
+ * A bare name stops before the trailing numbers, which are coordinates:
+ * `sprite Ma Balle 0 0` -> name "Ma Balle", rest "0 0".
+ * @param {string} rest text following the keyword
+ * @param {object} [options] {numbersEndName: true} to peel the trailing numbers off
+ * @returns {{name: string, rest: string}} name and what follows it
+ */
+const readName = (rest, options = {}) => {
+    const text = String(rest === null || typeof rest === 'undefined' ? '' : rest).trim();
+    const quote = text[0];
+    if (quote === '"' || quote === '\'') {
+        const end = text.indexOf(quote, 1);
+        // An unterminated quote still gives the whole rest as the name.
+        if (end === -1) return {name: text.slice(1).trim(), rest: ''};
+        return {name: text.slice(1, end), rest: text.slice(end + 1).trim()};
+    }
+    const words = text.split(/\s+/).filter(Boolean);
+    let cut = words.length;
+    if (options.numbersEndName) {
+        while (cut > 1 && /^[+-]?\d+(\.\d+)?$/.test(words[cut - 1])) cut--;
+    }
+    return {name: words.slice(0, cut).join(' '), rest: words.slice(cut).join(' ')};
+};
+
+/**
+ * Splits the tail of a `var` / `list` declaration into its name and the
+ * "= value" part, honouring a quoted name so that `var "mon score" = 0` keeps
+ * the space. The returned tail still starts with "=" (parseAssignTail's input).
+ * @param {string} rest text following the `var` / `list` keyword
+ * @returns {{name: string, tail: string}} name and "= value" tail
+ */
+const splitAssignment = rest => {
+    const text = String(rest === null || typeof rest === 'undefined' ? '' : rest).trim();
+    const quote = text[0];
+    if (quote === '"' || quote === '\'') {
+        const end = text.indexOf(quote, 1);
+        if (end === -1) return {name: text.slice(1).trim(), tail: ''};
+        return {name: text.slice(1, end), tail: text.slice(end + 1).trim()};
+    }
+    const eqIdx = text.indexOf('=');
+    if (eqIdx === -1) return {name: text.trim(), tail: ''};
+    return {name: text.slice(0, eqIdx).trim(), tail: text.slice(eqIdx).trim()};
+};
+
+/**
  * Parses "= value" or "= a, b, c" tails for var/list directives.
  * A QUOTED value always stays text, even when it only contains digits:
  * `var map_data = "1111111110..."` is a string of digits, not 1.11e+63 (which
@@ -634,8 +765,7 @@ const parseSpriteDirective = (node, spriteName) => {
     if (!SPRITE_KEYWORDS.has(keyword)) return null;
 
     const rest = line.slice(keyword.length).trim();
-    const unquote = value => String(value).trim()
-        .replace(/^["']|["']$/g, '');
+    const unquote = unquoteName;
 
     if (keyword === 'deletesprite' || keyword === 'removesprite') {
         const name = unquote(rest);
@@ -727,8 +857,7 @@ const parseCostumeDirective = (node, spriteName) => {
     if (!COSTUME_KEYWORDS.has(keyword)) return null;
 
     const rest = line.slice(keyword.length);
-    const unquote = value => String(value).trim()
-        .replace(/^["']|["']$/g, '');
+    const unquote = unquoteName;
     const withSprite = action => {
         if (spriteName) action.sprite = spriteName;
         return action;
@@ -945,10 +1074,13 @@ const parseDSL = text => {
 
             if (keyword === 'sprite') {
                 flushPending();
-                // sprite Name [@|at x y] [:]
-                const nameToken = parts[1] ? parts[1].replace(/:$/, '') : 'Sprite';
+                // sprite Name [@|at x y] [:] — the name may contain spaces,
+                // quoted (`sprite "Ma Balle" 0 0:`) or bare (`sprite Ma Balle:`),
+                // in which case the trailing numbers are the coordinates.
+                const {name, rest} = readName(lineText.slice(parts[0].length), {numbersEndName: true});
+                const nameToken = name || 'Sprite';
                 currentSprite = nameToken;
-                const coords = parts.slice(2).filter(p => /^[+-]?\d+(\.\d+)?$/.test(p));
+                const coords = rest.split(/\s+/).filter(p => /^[+-]?\d+(\.\d+)?$/.test(p));
                 const spriteAction = {type: 'CREATE_SPRITE', name: nameToken};
                 if (coords.length >= 2) {
                     spriteAction.x = Number(coords[0]);
@@ -962,17 +1094,13 @@ const parseDSL = text => {
                 emitScripts('Stage', node.children, actions);
             } else if (keyword === 'var' || keyword === 'variable') {
                 flushPending();
-                const rest = lineText.slice(parts[0].length).trim();
-                const eqIdx = rest.indexOf('=');
-                const name = (eqIdx === -1 ? rest : rest.slice(0, eqIdx)).trim();
-                const value = eqIdx === -1 ? 0 : parseAssignTail(rest.slice(eqIdx));
+                const {name, tail} = splitAssignment(lineText.slice(parts[0].length));
+                const value = tail ? parseAssignTail(tail) : 0;
                 if (name) actions.push({type: 'CREATE_VAR', name, value: value === null ? 0 : value});
             } else if (keyword === 'list') {
                 flushPending();
-                const rest = lineText.slice(parts[0].length).trim();
-                const eqIdx = rest.indexOf('=');
-                const name = (eqIdx === -1 ? rest : rest.slice(0, eqIdx)).trim();
-                const parsed = eqIdx === -1 ? [] : parseAssignTail(rest.slice(eqIdx));
+                const {name, tail} = splitAssignment(lineText.slice(parts[0].length));
+                const parsed = tail ? parseAssignTail(tail) : [];
                 let listValue = [];
                 if (Array.isArray(parsed)) listValue = parsed;
                 else if (parsed !== null) listValue = [parsed];
@@ -981,13 +1109,16 @@ const parseDSL = text => {
                 }
             } else if (keyword === 'clear' || keyword === 'clearblocks') {
                 flushPending();
-                const spriteName = parts[1] || currentSprite;
+                const {name} = readName(lineText.slice(parts[0].length));
+                const spriteName = name || currentSprite;
                 if (spriteName) actions.push({type: 'CLEAR_BLOCKS', sprite: spriteName});
             } else if (keyword === 'on' || keyword === 'target') {
                 // on <Sprite>:  -> select an EXISTING sprite (no CREATE_SPRITE);
                 // its indented body may contain edit directives or new scripts.
+                // The name may hold spaces: `on "Ma Balle":` or `on Ma Balle:`.
                 flushPending();
-                currentSprite = parts[1] ? parts[1].replace(/:$/, '') : currentSprite;
+                const {name} = readName(lineText.slice(parts[0].length));
+                currentSprite = name || currentSprite;
                 emitScripts(currentSprite, node.children, actions);
             } else if (EDIT_KEYWORDS.has(keyword)) {
                 // Top-level edit directive (edit / delete / insert / replace).

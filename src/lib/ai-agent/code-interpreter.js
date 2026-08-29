@@ -148,63 +148,123 @@ const parseLineCommands = text => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.startsWith('//'));
     const actions = [];
 
+    // A name may contain spaces (`CREATE_SPRITE Ma Balle 0 0`): it is then
+    // either quoted, or made of every word up to the trailing numbers.
+    const readQuotedName = rest => {
+        const text0 = String(rest || '').trim();
+        const quote = text0[0];
+        if (quote !== '"' && quote !== '\'') return null;
+        const end = text0.indexOf(quote, 1);
+        if (end === -1) return {name: text0.slice(1).trim(), rest: ''};
+        return {name: text0.slice(1, end), rest: text0.slice(end + 1).trim()};
+    };
+    const readName = rest => {
+        const quoted = readQuotedName(rest);
+        if (quoted) return quoted;
+        const text0 = String(rest || '').trim();
+        const words = text0 === '' ? [] : text0.split(/\s+/);
+        let cut = words.length;
+        while (cut > 1 && /^[+-]?\d+(\.\d+)?$/.test(words[cut - 1])) cut--;
+        return {name: words.slice(0, cut).join(' '), rest: words.slice(cut).join(' ')};
+    };
+    // A numeric text becomes a number ("0" included), anything else stays text.
+    const asValue = raw => {
+        if (raw === '') return 0;
+        const num = Number(raw);
+        return isNaN(num) ? raw : num;
+    };
+
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const parts = line.split(/\s+/);
         const cmd = parts[0].toUpperCase();
+        const rest = line.slice(parts[0].length).trim();
 
         switch (cmd) {
         case 'CREATE_SPRITE':
-        case 'AJOUTER_SPRITE':
+        case 'AJOUTER_SPRITE': {
+            const {name, rest: coords} = readName(rest);
+            const xy = coords.split(/\s+/).filter(Boolean);
             actions.push({
                 type: 'CREATE_SPRITE',
-                name: parts[1] || 'Sprite' + Math.floor(Math.random() * 100),
-                x: parts[2] !== undefined ? Number(parts[2]) : 0,
-                y: parts[3] !== undefined ? Number(parts[3]) : 0
+                name: name || 'Sprite' + Math.floor(Math.random() * 100),
+                x: xy[0] !== undefined ? Number(xy[0]) : 0,
+                y: xy[1] !== undefined ? Number(xy[1]) : 0
             });
             break;
+        }
 
         case 'DELETE_SPRITE':
         case 'SUPPRIMER_SPRITE':
             actions.push({
                 type: 'DELETE_SPRITE',
-                name: parts[1]
+                name: readName(rest).name
             });
             break;
 
         case 'CREATE_VAR':
-        case 'CREER_VARIABLE':
+        case 'CREER_VARIABLE': {
+            // `CREATE_VAR <nom> [<valeur>]`. A name with spaces is quoted
+            // (`CREATE_VAR "mon score" 0`); unquoted, only a trailing NUMBER is
+            // read as the value (`CREATE_VAR mon score 0`), anything else keeps
+            // the historical reading (`CREATE_VAR score bonjour`).
+            const quoted = readQuotedName(rest);
+            const words = rest === '' ? [] : rest.split(/\s+/);
+            const last = words[words.length - 1];
+            let name;
+            let value;
+            if (quoted) {
+                name = quoted.name;
+                value = quoted.rest;
+            } else if (words.length > 1 && /^[+-]?\d+(\.\d+)?$/.test(last)) {
+                name = words.slice(0, -1).join(' ');
+                value = last;
+            } else {
+                name = words[0] || '';
+                value = words.slice(1).join(' ');
+            }
             actions.push({
                 type: 'CREATE_VAR',
-                name: parts[1],
-                value: parts[2] !== undefined ? Number(parts[2]) || parts[2] : 0
+                name,
+                value: asValue(value)
             });
             break;
+        }
 
         case 'CREATE_LIST':
-        case 'CREER_LISTE':
+        case 'CREER_LISTE': {
+            // Only a QUOTED name can be told apart from the list items:
+            // `CREATE_LIST "ma liste" a b c`. Unquoted, the first word stays the
+            // name (the historical behaviour) since every other word is an item.
+            const quoted = readQuotedName(rest);
+            const name = quoted ? quoted.name : parts[1];
+            const items = quoted ? quoted.rest : parts.slice(2).join(' ');
             actions.push({
                 type: 'CREATE_LIST',
-                name: parts[1],
-                value: parts.slice(2)
+                name,
+                value: items === '' ? [] : items.split(/\s+/)
             });
             break;
+        }
 
         case 'SET_POS':
-        case 'SET_POSITION':
+        case 'SET_POSITION': {
+            const {name, rest: coords} = readName(rest);
+            const xy = coords.split(/\s+/).filter(Boolean);
             actions.push({
                 type: 'SET_POSITION',
-                sprite: parts[1],
-                x: Number(parts[2]) || 0,
-                y: Number(parts[3]) || 0
+                sprite: name,
+                x: Number(xy[0]) || 0,
+                y: Number(xy[1]) || 0
             });
             break;
+        }
 
         case 'CLEAR_BLOCKS':
         case 'EFFACER_BLOCS':
             actions.push({
                 type: 'CLEAR_BLOCKS',
-                sprite: parts[1]
+                sprite: readName(rest).name
             });
             break;
 
