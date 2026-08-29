@@ -204,8 +204,12 @@ const DSL_LANGUAGE_RULES = `Règles du langage :
 - L'IMBRICATION se fait par l'INDENTATION (2 espaces). Les blocs C (boucles, si) se terminent par \`:\` et leur contenu est indenté en dessous.
 - Un bloc rapporteur ou une condition s'écrit entre parenthèses : \`(random 1 10)\`, \`(touching _edge_)\`, \`(> (timer) 5)\`.
 - Le texte va entre guillemets : \`say "Bonjour"\`.
-- Une valeur de menu EN PLUSIEURS MOTS va entre guillemets : \`stop "other scripts in sprite"\`,
-  \`costume "Incomming call"\`, \`whenkey "up arrow"\` — sinon seul le premier mot est pris.
+- RÈGLE ABSOLUE — UN ESPACE = DES GUILLEMETS : dès qu'un nom contient un espace, tu l'écris
+  TOUJOURS entre guillemets, sans aucune exception, partout : déclarations, cibles, arguments
+  de blocs, valeurs de menu, outils /read et /costume, et \`(var "…")\` dans un calcul.
+  Les arguments étant séparés par des espaces, un nom non guillemeté est coupé et le projet
+  se retrouve avec des sprites et des variables au nom tronqué. Un nom d'un seul mot
+  s'écrit sans guillemets.
 - Un MOT NU est une VARIABLE, pas du texte : \`set py (+ py 1)\` additionne la variable \`py\`
   (sinon Scratch affiche le texte « py + 1 » et calcule 0 + 1). Guillemets = texte littéral.
 - Une valeur entre guillemets reste du TEXTE même si elle ne contient que des chiffres :
@@ -375,6 +379,7 @@ GESTION DES SPRITES ET DES COSTUMES :
   /costume <sprite> [<nom>]           -> LIT le code SVG d'un costume existant
   renamesprite <ancien> = <nouveau>   -> renomme un sprite (les blocs qui le citent sont mis à jour)
   clear <sprite>                      -> vide ses blocs
+Un nom qui contient un espace va TOUJOURS entre guillemets, dans les outils comme dans le code.
 Pour MODIFIER un dessin existant : lis-le avec \`/costume\`, retouche les formes, puis renvoie
 \`costume "même nom" = <svg .../>\` — le costume de ce nom est remplacé, les autres sont conservés.
 En JSON : RENAME_SPRITE { sprite: "ancien", name: "nouveau" }, DELETE_SPRITE { name }.

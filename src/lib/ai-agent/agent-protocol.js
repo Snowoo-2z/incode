@@ -32,7 +32,8 @@ const AGENT_TOOLS = {
     },
     read: {
         args: '<sprite>',
-        doc: '/read <sprite>         -> TOUT un sprite : propriétés, variables, costumes et scripts ADRESSÉS'
+        doc: '/read <sprite>         -> TOUT un sprite : propriétés, variables, costumes et scripts ADRESSÉS' +
+            ' (un nom avec espace va entre guillemets)'
     },
     vars: {
         args: '',
@@ -44,7 +45,8 @@ const AGENT_TOOLS = {
     },
     costume: {
         args: '<sprite> [<costume>]',
-        doc: '/costume <sprite> [<costume>] -> le code SVG du costume (tous si pas de nom)'
+        doc: '/costume <sprite> [<costume>] -> le code SVG du costume (tous si pas de nom ; ' +
+            'un nom avec espace va entre guillemets)'
     }
 };
 
@@ -56,6 +58,59 @@ const TOOL_ALIASES = {
     search: ['search', 'cherche', 'grep', 'find'],
     costume: ['costume', 'costumes', 'svg', 'lirecostume', 'backdrop']
 };
+
+/**
+ * Quotes a name for the examples shown to the AI, so a name with spaces stays
+ * ONE argument when the AI copies the line back (`/costume "Ma Balle" visage`).
+ * @param {string} name sprite / costume name
+ * @returns {string} the name, quoted when it needs to be
+ */
+const quoteName = name => {
+    const text = String(name === null || typeof name === 'undefined' ? '' : name);
+    return /[\s"']/.test(text) ? `"${text.replace(/"/g, '\\"')}"` : text;
+};
+
+/**
+ * Splits a tool argument on its spaces, keeping the quoted parts together.
+ * Sprite, costume and variable names are free text and often contain spaces, so
+ * `/costume "Ma Balle" "mon costume"` must give TWO arguments, not four words.
+ * @param {string} text argument text
+ * @returns {Array<string>} tokens (quotes removed, spaces inside them preserved)
+ */
+const splitQuoted = text => {
+    const src = String(text === null || typeof text === 'undefined' ? '' : text);
+    const tokens = [];
+    let i = 0;
+    while (i < src.length) {
+        while (i < src.length && /\s/.test(src[i])) i++;
+        if (i >= src.length) break;
+        const quote = src[i];
+        if (quote === '"' || quote === '\'') {
+            const end = src.indexOf(quote, i + 1);
+            // An unterminated quote swallows the rest of the line.
+            if (end === -1) {
+                tokens.push(src.slice(i + 1).trim());
+                break;
+            }
+            tokens.push(src.slice(i + 1, end));
+            i = end + 1;
+            continue;
+        }
+        const start = i;
+        while (i < src.length && !/\s/.test(src[i])) i++;
+        tokens.push(src.slice(start, i));
+    }
+    return tokens;
+};
+
+/**
+ * Removes every quote from an argument (`/search "un mot"` -> `un mot`).
+ * @param {string} text argument text
+ * @returns {string} unquoted text
+ */
+const stripQuotes = text => String(text === null || typeof text === 'undefined' ? '' : text)
+    .replace(/["']/g, '')
+    .trim();
 
 /**
  * Builds the documentation block listing the tools.
@@ -89,13 +144,18 @@ const parseAgentRequests = text => {
         const raw = line.trim();
         const word = match[1].toLowerCase();
         const bare = match[2].trim();
-        const arg = bare.replace(/^["']|["']$/g, '').replace(/["']/g, '');
+        // `arg` is the single-value reading of the argument, which is what the
+        // one-argument tools want (/read, /search). `tokens` keeps the quoting
+        // so a tool taking SEVERAL arguments — /costume <sprite> <costume> —
+        // can tell `"Ma Balle"` (one name with a space) from two words.
+        const arg = bare.replace(/^["']|["']$/g, '').trim();
+        const tokens = splitQuoted(bare);
         const tool = aliasToTool[word];
         if (!tool) {
             unknown.push(raw);
             continue;
         }
-        requests.push({tool, arg, raw});
+        requests.push({tool, arg, tokens, raw});
     }
     return {requests, unknown};
 };
@@ -175,6 +235,27 @@ const listSpriteNames = vm => {
     return names.join(', ') || 'aucun';
 };
 
+/**
+ * Splits the arguments of `/costume <sprite> [<costume>]` into a sprite name and
+ * a costume name. Both may contain spaces: quotes settle it
+ * (`/costume "Ma Balle" "mon costume"`), and when nothing is quoted the longest
+ * prefix of words that matches a real sprite wins (`/costume Ma Balle visage`).
+ * @param {object} vm Scratch VM
+ * @param {Array<string>} tokens quote-aware tokens of the argument
+ * @returns {{sprite: string, costume: string}} both names
+ */
+const splitSpriteAndCostume = (vm, tokens) => {
+    if (!tokens.length) return {sprite: '', costume: ''};
+    if (tokens.length === 1) return {sprite: tokens[0], costume: ''};
+    for (let count = tokens.length - 1; count > 1; count--) {
+        const candidate = tokens.slice(0, count).join(' ');
+        if (findTargetByName(vm, candidate)) {
+            return {sprite: candidate, costume: tokens.slice(count).join(' ')};
+        }
+    }
+    return {sprite: tokens[0], costume: tokens.slice(1).join(' ')};
+};
+
 const readTargetDetail = (vm, name) => {
     const real = findTargetByName(vm, name);
     if (!real) {
@@ -195,8 +276,8 @@ const readTargetDetail = (vm, name) => {
     lines.push(addressed || '  (aucun script)');
     lines.push('Rappel : pour modifier un script, utilise les adresses ci-dessus, ex. `edit 1/3.1 move 25`.');
     if (target.costumes.length) {
-        lines.push(`Pour LIRE ou modifier le dessin d'un costume : /costume ${target.name} ` +
-            `<${target.costumes.map(c => c.name).join('|')}>`);
+        lines.push(`Pour LIRE ou modifier le dessin d'un costume : /costume ${quoteName(target.name)} ` +
+            `<${target.costumes.map(c => quoteName(c.name)).join('|')}>`);
     }
     return lines.join('\n');
 };
@@ -334,14 +415,15 @@ const runAgentRequest = (request, vm) => {
     case 'vars':
         return readGlobalVariables(vm);
     case 'search':
-        return searchProject(vm, request.arg);
+        return searchProject(vm, stripQuotes(request.arg));
     case 'costume': {
-        const parts = request.arg.split(/\s+/);
-        const sprite = parts[0] || '';
-        const costume = parts.slice(1).join(' ');
+        const tokens = request.tokens && request.tokens.length ?
+            request.tokens :
+            splitQuoted(request.arg);
+        const {sprite, costume} = splitSpriteAndCostume(vm, tokens);
         return sprite ?
             readCostumes(vm, sprite, costume) :
-            '⚠ /costume demande un nom de sprite. Ex : /costume Balle visage';
+            '⚠ /costume demande un nom de sprite (entre guillemets s\'il contient un espace).';
     }
     default:
         return `⚠ Outil inconnu : ${request.raw}`;
@@ -370,6 +452,8 @@ const runAgentRequests = (text, vm) => {
 export {
     AGENT_TOOLS,
     agentToolsDoc,
+    splitQuoted,
+    quoteName,
     parseAgentRequests,
     stripAgentRequests,
     runAgentRequest,
