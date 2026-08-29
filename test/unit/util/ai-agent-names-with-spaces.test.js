@@ -354,13 +354,20 @@ describe('legacy line commands — names with spaces', () => {
 });
 
 describe('prompt — the rule is taught to the AI', () => {
-    test('the agent prompt shows quoted multi-word names', async () => {
+    test('the agent prompt states ONE blanket rule, not a list of examples', async () => {
         const {generateAgentPrompt} = await import('../../../src/lib/ai-agent/prompt-generator');
         const {vm} = makeFixture();
         const prompt = generateAgentPrompt(vm, 'un jeu');
-        expect(prompt).toContain('sprite "Ma Balle" 0 0:');
-        expect(prompt).toContain('set "mon score" 1');
-        expect(prompt).toContain('/costume "Ma Balle"');
-        expect(prompt).toContain('of "x position" "Ma Balle"');
+        // The rule, and the reason why: an unquoted name gets cut.
+        expect(prompt).toContain('RÈGLE ABSOLUE — UN ESPACE = DES GUILLEMETS');
+        expect(prompt).toContain('TOUJOURS entre guillemets, sans aucune exception');
+        expect(prompt).toContain('nom tronqué');
+        // Tools are covered by the same rule.
+        expect(prompt).toContain('dans les outils comme dans le code');
+        // No worked examples: they invite the AI to try the unquoted variants.
+        expect(prompt).not.toContain('sprite "Ma Balle"');
+        expect(prompt).not.toContain('set "mon score"');
+        expect(prompt).not.toContain('/costume "Ma Balle"');
+        expect(prompt).not.toContain('of "x position"');
     });
 });

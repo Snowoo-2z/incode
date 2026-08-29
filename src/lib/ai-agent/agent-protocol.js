@@ -33,7 +33,7 @@ const AGENT_TOOLS = {
     read: {
         args: '<sprite>',
         doc: '/read <sprite>         -> TOUT un sprite : propriétés, variables, costumes et scripts ADRESSÉS' +
-            ' (nom avec espaces entre guillemets : /read "Ma Balle")'
+            ' (un nom avec espace va entre guillemets)'
     },
     vars: {
         args: '',
@@ -45,8 +45,8 @@ const AGENT_TOOLS = {
     },
     costume: {
         args: '<sprite> [<costume>]',
-        doc: '/costume <sprite> [<costume>] -> le code SVG du costume (tous si pas de nom) — ' +
-            'noms avec espaces entre guillemets : /costume "Ma Balle" "visage joyeux"'
+        doc: '/costume <sprite> [<costume>] -> le code SVG du costume (tous si pas de nom ; ' +
+            'un nom avec espace va entre guillemets)'
     }
 };
 
@@ -423,7 +423,7 @@ const runAgentRequest = (request, vm) => {
         const {sprite, costume} = splitSpriteAndCostume(vm, tokens);
         return sprite ?
             readCostumes(vm, sprite, costume) :
-            '⚠ /costume demande un nom de sprite. Ex : /costume "Ma Balle" "mon costume"';
+            '⚠ /costume demande un nom de sprite (entre guillemets s\'il contient un espace).';
     }
     default:
         return `⚠ Outil inconnu : ${request.raw}`;

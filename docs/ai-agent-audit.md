@@ -216,9 +216,11 @@ et le parseur recolle les mots quand le sens n'est pas ambigu.
 - **`code-interpreter.js`** : les commandes héritées (`CREATE_SPRITE Ma Balle
   0 0`, `CLEAR_BLOCKS "Ma Balle"`…) gardent le nom entier ; `CREATE_LIST`
   demande des guillemets pour distinguer le nom des éléments.
-- **`prompt-generator.js`** : la grammaire envoyée à l'IA documente la règle,
-  avec les exemples ci-dessus, et rappelle `(var "mon score")` pour lire une
-  variable à espaces dans un calcul.
+- **`prompt-generator.js`** : la grammaire envoyée à l'IA ne donne **pas
+  d'exemples** de noms à espaces — elle énonce une règle unique et sans
+  exception (« UN ESPACE = DES GUILLEMETS », y compris dans `/read`, `/costume`
+  et `(var "…")`), avec la raison (un nom non guillemeté est coupé). Des
+  exemples montreraient à l'IA des formes non guillemetées qu'elle réutiliserait.
 - **Tests** : `test/unit/util/ai-agent-names-with-spaces.test.js` (27 tests)
   couvre le parseur, le constructeur de blocs (la variable `mon score` est bien
   résolue, pas recréée), les outils de l'agent, l'aller-retour liste adressée →
