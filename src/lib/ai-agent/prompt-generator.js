@@ -23,6 +23,7 @@ import {formatProjectSummary} from './sprite-reader.js';
 import {formatProjectOverview, agentToolsDoc} from './agent-protocol.js';
 import {BLOCK_SCHEMA, getDefaultInputs, getDefaultFields} from './block-schema.js';
 import {ALIASES, getParamOrder} from './dsl-parser.js';
+import ProjectDocumentation from '../project-documentation.js';
 
 /**
  * Builds the DSL command reference straight from the parser's alias table and
@@ -195,7 +196,7 @@ En JSON, les actions équivalentes sont CREATE_COSTUME { sprite, name, svg }, RE
 
 /** Answer-format paragraph shared by every prompt. */
 const ANSWER_FORMAT = `FORMAT DE RÉPONSE ATTENDU — SCRATCHSCRIPT (format compact recommandé) :
-Réponds UNIQUEMENT par un bloc de code (entouré de \`\`\`scratch et \`\`\`) écrit dans un mini-langage indenté, proche de Scratch. C'est BEAUCOUP plus court que le JSON et donc préférable, surtout pour les gros projets.`;
+Tu PEUX parler et expliquer ce que tu fais (c'est même encouragé). Si tu modifies le projet, termine ta réponse par UN SEUL bloc de code (entouré de \`\`\`scratch et \`\`\`) écrit dans un mini-langage indenté, proche de Scratch. C'est BEAUCOUP plus court que le JSON et donc préférable, surtout pour les gros projets. Si ta réponse est uniquement une explication, un plan ou une question, tu n'as pas besoin de bloc de code.`;
 
 /** Grammar of the mini-language, shared by every prompt. */
 const DSL_LANGUAGE_RULES = `Règles du langage :
@@ -260,12 +261,25 @@ on Balle:
 
 /** Closing rules. */
 const IMPORTANT_RULES = `RÈGLES IMPORTANTES :
+- Tu PEUX (et c'est encouragé) parler, expliquer ce que tu vas faire, pourquoi tu le fais et ce qui a changé avant de donner ton code. Une petite explication claire aide le développeur à comprendre et à décider.
+- Pour une modification, termine TOUJOURS par UN SEUL bloc \`\`\`scratch ... \`\`\` directement exécutable. S'il n'y a pas de code à envoyer (question, plan, explication), réponds sans bloc code.
 - Fournis un code complet, fonctionnel et directement exécutable.
 - N'utilise QUE les noms/opcodes listés dans la référence ci-dessus : ce sont exactement les blocs de la palette Scratch. Tout autre sera refusé.
 - Respecte l'ordre des arguments de la référence. Pour lever un doute tu peux nommer un argument : \`gotoxy X=0 Y=0\`.
 - Pour une PETITE modification d'un projet existant, utilise les éditions ciblées (edit/insert/delete/replace) : c'est beaucoup plus court que de recréer le sprite.
 - Dessine les costumes dont le jeu a besoin en SVG plutôt que de laisser les sprites invisibles.
-- Réponds UNIQUEMENT avec le bloc \`\`\`scratch ... \`\`\`, sans explication autour, pour que l'interface puisse l'exécuter directement.`;
+- Si une liste ou une variable est trop volumineuse, ne la recopie PAS entièrement : utilise l'aperçu déjà fourni et demande des détails seulement si nécessaire.`;
+
+/** Optional project-documentation block shared by every prompt generator. */
+const MAX_DOC_PROMPT_CHARS = 12000;
+const projectDocumentationBlock = () => {
+    const text = ProjectDocumentation.getText();
+    if (!text) return '';
+    const doc = text.length > MAX_DOC_PROMPT_CHARS ?
+        `${text.slice(0, MAX_DOC_PROMPT_CHARS)}\n… (documentation tronquée ici)` :
+        text;
+    return `\n\nDOCUMENTATION DU PROJET (donnée par le développeur, à respecter et à utiliser comme contexte) :\n${doc}\n`;
+};
 
 /** JSON fallback description. */
 const JSON_ALTERNATIVE = `ALTERNATIVE (si tu préfères) — FORMAT JSON :
@@ -286,7 +300,7 @@ const generateAIPrompt = (vm, userGoal) => {
     return `Tu es un développeur expert Scratch 3.0 agissant en tant qu'agent autonome pour programmer directement un projet Scratch.
 
 Voici l'état actuel du projet Scratch :
-${projectSummary}
+${projectSummary}${projectDocumentationBlock()}
 
 OBJECTIF DE L'UTILISATEUR :
 "${userGoal || 'Améliorer ou créer le projet'}"
@@ -326,7 +340,7 @@ const AGENT_INTRO = 'Tu es un AGENT AUTONOME Scratch 3.0. Tu travailles en plusi
 const generateAgentPrompt = (vm, userGoal) => `${AGENT_INTRO}
 
 TU N'AS PAS LE CODE DU PROJET. Voici seulement son APERÇU :
-${formatProjectOverview(vm)}
+${formatProjectOverview(vm)}${projectDocumentationBlock()}
 
 OBJECTIF DE L'UTILISATEUR :
 "${userGoal || 'Améliorer ou créer le projet'}"
@@ -341,7 +355,7 @@ PROTOCOLE :
 - Pour MODIFIER du code existant, fais d'abord \`/read <sprite>\` : tu obtiendras
   les ADRESSES \`[1/3.1]\` nécessaires à \`edit\`/\`insert\`/\`delete\`.
 - Tu peux mélanger outils ET code dans la même réponse : les outils sont exécutés, puis le code est appliqué.
-- Quand tu as terminé, n'écris AUCUN outil : envoie seulement le code.
+- Tu PEUX expliquer ce que tu fais et pourquoi avant le code. Quand tu as terminé, n'écris AUCUN outil : envoie seulement le code.
 
 ${ANSWER_FORMAT}
 
@@ -415,7 +429,7 @@ const generateContinuationPrompt = (vm, userNote = '', lastReport = null) => {
     return `Nous continuons la même conversation sur ce projet Scratch : tu connais déjà le langage ScratchScript, ses commandes et la syntaxe des costumes SVG. Inutile de te les renvoyer.
 
 NOUVEL ÉTAT DU PROJET (après exécution) :
-${projectSummary}
+${projectSummary}${projectDocumentationBlock()}
 ${report ? `
 RÉSULTAT DE LA DERNIÈRE EXÉCUTION :
 ${report}
@@ -423,7 +437,7 @@ ${report}
 MA DEMANDE :
 "${userNote || 'Vérifie le projet et continue les améliorations nécessaires selon le plan.'}"
 
-Réponds UNIQUEMENT avec un bloc \`\`\`scratch ... \`\`\` (mêmes règles qu'avant), sans explication autour.
+Tu peux expliquer ce que tu fais avant. Pour une modification, termine UNIQUEMENT par un bloc \`\`\`scratch ... \`\`\` (mêmes règles qu'avant). Pour une réponse explicative, aucun bloc n'est nécessaire.
 `;
 };
 

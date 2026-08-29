@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="200" viewBox="0 0 820 200">
+  <defs>
+    <linearGradient id="scratchGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4C97FF"/>
+      <stop offset="100%" stop-color="#2F6BFF"/>
+    </linearGradient>
+    <linearGradient id="scriptGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9966FF"/>
+      <stop offset="100%" stop-color="#7B47E0"/>
+    </linearGradient>
+  </defs>
+  <text x="0" y="130" font-family="'Baloo 2','Nunito','Arial Rounded MT Bold',Arial,sans-serif"
+    font-size="100" font-weight="800" letter-spacing="-2" fill="url(#scratchGrad)">Scratch</text>
+  <text x="360" y="130" font-family="'Baloo 2','Nunito','Arial Rounded MT Bold',Arial,sans-serif"
+    font-size="100" font-weight="800" letter-spacing="-2" fill="url(#scriptGrad)">Script</text>
+</svg>

@@ -34,7 +34,7 @@ import CloudVariablesToggler from '../../containers/tw-cloud-toggler.jsx';
 import TWSaveStatus from './tw-save-status.jsx';
 import TWNews from './tw-news.jsx';
 
-import {openTipsLibrary, openSettingsModal, openRestorePointModal, openAIAgentModal} from '../../reducers/modals';
+import {openTipsLibrary, openSettingsModal, openRestorePointModal, openAIAgentModal, openDocumentationModal} from '../../reducers/modals';
 import {setPlayer} from '../../reducers/mode';
 import {
     isTimeTravel220022BC,
@@ -101,6 +101,7 @@ import ninetiesLogo from './nineties_logo.svg';
 import catLogo from './cat_logo.svg';
 import prehistoricLogo from './prehistoric-logo.svg';
 import oldtimeyLogo from './oldtimey-logo.svg';
+import scratchScriptLogo from './scratchscript-logo.svg';
 
 import sharedMessages from '../../lib/shared-messages';
 
@@ -491,6 +492,12 @@ class MenuBar extends React.Component {
                 )}
             >
                 <div className={styles.mainMenu}>
+                    <img
+                        id="logo_img"
+                        className={styles.scratchLogo}
+                        src={scratchScriptLogo}
+                        draggable={false}
+                    />
                     <div className={styles.fileGroup}>
                         {this.props.errors.length > 0 && <div>
                             <MenuLabel
@@ -937,6 +944,19 @@ class MenuBar extends React.Component {
                                 </span>
                             </div>
                         )}
+                        {this.props.onClickDocumentation && (
+                            <div
+                                className={classNames(styles.menuBarItem, styles.hoverable)}
+                                onClick={this.props.onClickDocumentation}
+                                title={'Documentation invisible : importez, créez avec l\'IA, ' +
+                                    'ou modifiez-la manuellement'}
+                            >
+                                <span style={{fontSize: '1.1rem', marginRight: '4px'}}>{'📄'}</span>
+                                <span className={styles.collapsibleLabel}>
+                                    {'Documentation'}
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     <Divider className={styles.divider} />
@@ -1139,6 +1159,7 @@ MenuBar.propTypes = {
     onClickSettings: PropTypes.func,
     onClickSettingsModal: PropTypes.func,
     onClickAIAgent: PropTypes.func,
+    onClickDocumentation: PropTypes.func,
     onLogOut: PropTypes.func,
     onOpenRegistration: PropTypes.func,
     onOpenTipLibrary: PropTypes.func,
@@ -1236,6 +1257,10 @@ const mapDispatchToProps = dispatch => ({
     onClickAIAgent: () => {
         dispatch(closeEditMenu());
         dispatch(openAIAgentModal());
+    },
+    onClickDocumentation: () => {
+        dispatch(closeEditMenu());
+        dispatch(openDocumentationModal());
     },
     onRequestCloseSettings: () => dispatch(closeSettingsMenu()),
     onClickNew: needSave => {

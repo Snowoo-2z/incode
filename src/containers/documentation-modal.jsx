@@ -1,18 +1,18 @@
 import PropTypes from 'prop-types';
 import React from 'react';
 import {connect} from 'react-redux';
-import {closeAIAgentModal} from '../reducers/modals';
-import AIAgentModalComponent from '../components/ai-agent-modal/ai-agent-modal.jsx';
+import {closeDocumentationModal} from '../reducers/modals';
+import DocumentationModalComponent from '../components/documentation-modal/documentation-modal.jsx';
 
-const AIAgentModal = props => (
-    <AIAgentModalComponent
+const DocumentationModal = props => (
+    <DocumentationModalComponent
         onClose={props.onClose}
         projectTitle={props.projectTitle}
         vm={props.vm}
     />
 );
 
-AIAgentModal.propTypes = {
+DocumentationModal.propTypes = {
     onClose: PropTypes.func.isRequired,
     projectTitle: PropTypes.string,
     vm: PropTypes.shape({
@@ -28,10 +28,10 @@ const mapStateToProps = state => ({
 });
 
 const mapDispatchToProps = dispatch => ({
-    onClose: () => dispatch(closeAIAgentModal())
+    onClose: () => dispatch(closeDocumentationModal())
 });
 
 export default connect(
     mapStateToProps,
     mapDispatchToProps
-)(AIAgentModal);
+)(DocumentationModal);

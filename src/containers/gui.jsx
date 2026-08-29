@@ -178,6 +178,7 @@ const mapStateToProps = state => {
         unknownPlatformModalVisible: state.scratchGui.modals.unknownPlatformModal,
         invalidProjectModalVisible: state.scratchGui.modals.invalidProjectModal,
         aiAgentModalVisible: state.scratchGui.modals.aiAgentModal,
+        documentationModalVisible: state.scratchGui.modals.documentationModal,
         vm: state.scratchGui.vm
     };
 };

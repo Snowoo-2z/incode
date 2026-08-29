@@ -4,6 +4,7 @@
  */
 
 import {listAddressedScripts} from './block-address.js';
+import {formatValuePreview} from './value-preview.js';
 
 // Helper to translate opcodes and arguments into concise pseudo-code
 const formatBlockToText = (block, blocksMap, indent = 0) => {
@@ -433,7 +434,7 @@ const formatProjectSummary = vm => {
 
     if (stage) {
         output += `\n[SCÈNE] (ID: ${stage.id})\n`;
-        const globalVars = stage.variables.map(v => `${v.name} = ${JSON.stringify(v.value)}`).join(', ');
+        const globalVars = stage.variables.map(v => `${v.name} = ${formatValuePreview(v.value)}`).join(', ');
         output += `- Variables globales : ${globalVars || 'aucune'}\n`;
         output += `- Arrière-plans : ${stage.costumes.map(c => c.name).join(', ') || 'aucun'}\n`;
         const stageScripts = realById[stage.id] ? formatAddressedScripts(realById[stage.id], '  ') : '';
@@ -448,7 +449,7 @@ const formatProjectSummary = vm => {
             output += `\n${i + 1}. SPRITE: "${sp.name}" (ID: ${sp.id})\n`;
             output += `   - Coordonnées: x = ${sp.x}, y = ${sp.y}, Direction = ${sp.direction}°, Taille = ${sp.size}%, Visible = ${sp.visible ? 'oui' : 'non'}\n`;
             if (sp.variables.length > 0) {
-                output += `   - Variables locales: ${sp.variables.map(v => `${v.name} = ${JSON.stringify(v.value)}`).join(', ')}\n`;
+                output += `   - Variables locales: ${sp.variables.map(v => `${v.name} = ${formatValuePreview(v.value)}`).join(', ')}\n`;
             }
             output += `   - Costumes: ${sp.costumes.map(c => c.name).join(', ') || 'aucun'}\n`;
             const spScripts = realById[sp.id] ? formatAddressedScripts(realById[sp.id], '   ') : '';

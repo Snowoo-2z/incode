@@ -38,6 +38,7 @@ import TWFontsModal from '../../containers/tw-fonts-modal.jsx';
 import TWUnknownPlatformModal from '../../containers/tw-unknown-platform-modal.jsx';
 import TWInvalidProjectModal from '../../containers/tw-invalid-project-modal.jsx';
 import AIAgentModal from '../../containers/ai-agent-modal.jsx';
+import DocumentationModal from '../../containers/documentation-modal.jsx';
 
 import {STAGE_SIZE_MODES, FIXED_WIDTH, UNCONSTRAINED_NON_STAGE_WIDTH} from '../../lib/layout-constants';
 import {resolveStageSize} from '../../lib/screen-utils';
@@ -160,6 +161,7 @@ const GUIComponent = props => {
         unknownPlatformModalVisible,
         invalidProjectModalVisible,
         aiAgentModalVisible,
+        documentationModalVisible,
         vm,
         ...componentProps
     } = omit(props, 'dispatch');
@@ -195,6 +197,7 @@ const GUIComponent = props => {
                 {unknownPlatformModalVisible && <TWUnknownPlatformModal />}
                 {invalidProjectModalVisible && <TWInvalidProjectModal />}
                 {aiAgentModalVisible && <AIAgentModal />}
+                {documentationModalVisible && <DocumentationModal />}
             </React.Fragment>
         );
 
@@ -544,6 +547,7 @@ GUIComponent.propTypes = {
     unknownPlatformModalVisible: PropTypes.bool,
     invalidProjectModalVisible: PropTypes.bool,
     aiAgentModalVisible: PropTypes.bool,
+    documentationModalVisible: PropTypes.bool,
     vm: PropTypes.instanceOf(VM).isRequired
 };
 GUIComponent.defaultProps = {
@@ -576,7 +580,8 @@ const mapStateToProps = state => ({
     // This is the button's mode, as opposed to the actual current state
     blocksId: state.scratchGui.timeTravel.year.toString(),
     stageSizeMode: state.scratchGui.stageSize.stageSize,
-    theme: state.scratchGui.theme.theme
+    theme: state.scratchGui.theme.theme,
+    documentationModalVisible: state.scratchGui.modals.documentationModal
 });
 
 export default injectIntl(connect(
