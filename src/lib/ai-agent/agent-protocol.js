@@ -22,6 +22,7 @@
 
 import {readTarget, readAllTargets, formatAddressedScripts} from './sprite-reader.js';
 import {getCostumeSvg} from './sprite-costumes.js';
+import {formatValuePreview, oversizedValueNote} from './value-preview.js';
 
 /** Every tool the AI may call, with the doc line shown in the prompt. */
 const AGENT_TOOLS = {
@@ -187,7 +188,7 @@ const readTargetDetail = (vm, name) => {
         `- Costumes : ${target.costumes.map(c => c.name).join(', ') || 'aucun'}`,
         `- Sons : ${target.sounds.join(', ') || 'aucun'}`,
         `- Variables locales : ${
-            target.variables.map(v => `${v.name} = ${JSON.stringify(v.value)}`).join(', ') || 'aucune'}`,
+            target.variables.map(v => `${v.name} = ${formatValuePreview(v.value)}`).join(', ') || 'aucune'}`,
         `- Scripts : ${target.scripts.length} (${target.blocksCount} blocs)`
     ];
     const addressed = real ? formatAddressedScripts(real, '  ') : '';
@@ -213,12 +214,13 @@ const readGlobalVariables = vm => {
     const lists = stage.variables.filter(v => v.type === 'list');
     const out = ['=== VARIABLES GLOBALES ==='];
     out.push(vars.length ?
-        vars.map(v => `  ${v.name} = ${JSON.stringify(v.value)}`).join('\n') :
+        vars.map(v => `  ${v.name} = ${formatValuePreview(v.value)}`).join('\n') :
         '  (aucune)');
     out.push('=== LISTES GLOBALES ===');
     out.push(lists.length ?
-        lists.map(v => `  ${v.name} = [${(Array.isArray(v.value) ? v.value : []).join(', ')}]`).join('\n') :
+        lists.map(v => `  ${v.name} = ${formatValuePreview(v.value)}${oversizedValueNote(v.value) || ''}`).join('\n') :
         '  (aucune)');
+    out.push('Note : les listes volumineuses sont affichées en APERÇU (ex. 30 premiers éléments).');
     return out.join('\n');
 };
 
@@ -293,7 +295,7 @@ const searchProject = (vm, query) => {
         for (const v of target.variables) {
             const varName = v.name.toLowerCase();
             if (varName.includes(needle)) {
-                found.push(`  variable ${v.name} = ${JSON.stringify(v.value)}`);
+                found.push(`  variable ${v.name} = ${formatValuePreview(v.value)}`);
             }
         }
         for (const c of target.costumes) {

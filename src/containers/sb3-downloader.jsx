@@ -4,6 +4,8 @@ import React from 'react';
 import {connect} from 'react-redux';
 import {projectTitleInitialState, setProjectTitle} from '../reducers/project-title';
 import downloadBlob from '../lib/download-blob';
+import JSZip from '@turbowarp/jszip';
+import ProjectDocumentation from '../lib/project-documentation.js';
 import {setProjectUnchanged} from '../reducers/project-changed';
 import {showStandardAlert, showAlertWithTimeout} from '../reducers/alerts';
 import {setFileHandle} from '../reducers/tw';
@@ -68,7 +70,8 @@ class SB3Downloader extends React.Component {
             'downloadProject',
             'saveAsNew',
             'saveToLastFile',
-            'saveToLastFileOrNew'
+            'saveToLastFileOrNew',
+            'embedDocumentation'
         ]);
     }
     startedSaving () {
@@ -81,15 +84,35 @@ class SB3Downloader extends React.Component {
             this.props.onSaveFinished();
         }
     }
+    async embedDocumentation (content) {
+        const title = this.props.projectFilename.replace(/\.sb3$/, '');
+        ProjectDocumentation.bindToProject(title);
+        const doc = ProjectDocumentation.getText();
+        if (!doc) return content;
+        try {
+            const zip = await JSZip.loadAsync(content);
+            zip.file('documentation.md', doc);
+            return zip.generateAsync({type: 'blob'});
+        } catch (e) {
+            // If embedding fails, still download the unmodified project.
+            return content;
+        }
+    }
     downloadProject () {
         if (!this.props.canSaveProject) {
             return;
         }
         this.startedSaving();
-        this.props.saveProjectSb3().then(content => {
-            this.finishedSaving();
-            downloadBlob(this.props.projectFilename, content);
-        });
+        this.props.saveProjectSb3().then(content => (
+            this.embedDocumentation(content)
+                .then(finalContent => {
+                    this.finishedSaving();
+                    downloadBlob(this.props.projectFilename, finalContent);
+                    // Companion "documentation" file: downloaded at the same time as
+                    // the .sb3 so the developer gets the invisible project doc too.
+                    ProjectDocumentation.downloadSidecar();
+                })
+        ));
     }
     async saveAsNew () {
         if (!this.props.canSaveProject) {

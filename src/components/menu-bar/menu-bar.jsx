@@ -34,7 +34,7 @@ import CloudVariablesToggler from '../../containers/tw-cloud-toggler.jsx';
 import TWSaveStatus from './tw-save-status.jsx';
 import TWNews from './tw-news.jsx';
 
-import {openTipsLibrary, openSettingsModal, openRestorePointModal, openAIAgentModal} from '../../reducers/modals';
+import {openTipsLibrary, openSettingsModal, openRestorePointModal, openAIAgentModal, openDocumentationModal} from '../../reducers/modals';
 import {setPlayer} from '../../reducers/mode';
 import {
     isTimeTravel220022BC,
@@ -937,6 +937,19 @@ class MenuBar extends React.Component {
                                 </span>
                             </div>
                         )}
+                        {this.props.onClickDocumentation && (
+                            <div
+                                className={classNames(styles.menuBarItem, styles.hoverable)}
+                                onClick={this.props.onClickDocumentation}
+                                title={'Documentation invisible : importez, créez avec l\'IA, ' +
+                                    'ou modifiez-la manuellement'}
+                            >
+                                <span style={{fontSize: '1.1rem', marginRight: '4px'}}>{'📄'}</span>
+                                <span className={styles.collapsibleLabel}>
+                                    {'Documentation'}
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     <Divider className={styles.divider} />
@@ -1139,6 +1152,7 @@ MenuBar.propTypes = {
     onClickSettings: PropTypes.func,
     onClickSettingsModal: PropTypes.func,
     onClickAIAgent: PropTypes.func,
+    onClickDocumentation: PropTypes.func,
     onLogOut: PropTypes.func,
     onOpenRegistration: PropTypes.func,
     onOpenTipLibrary: PropTypes.func,
@@ -1236,6 +1250,10 @@ const mapDispatchToProps = dispatch => ({
     onClickAIAgent: () => {
         dispatch(closeEditMenu());
         dispatch(openAIAgentModal());
+    },
+    onClickDocumentation: () => {
+        dispatch(closeEditMenu());
+        dispatch(openDocumentationModal());
     },
     onRequestCloseSettings: () => dispatch(closeSettingsMenu()),
     onClickNew: needSave => {

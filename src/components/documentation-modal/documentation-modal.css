@@ -1,0 +1,255 @@
+@import "../../css/colors.css";
+
+.modal-content {
+    width: 760px;
+    max-width: 95vw;
+    margin-top: 30px;
+    overflow: hidden;
+}
+
+.body {
+    background: $ui-modal-background;
+    padding: 1.1rem 1.3rem 1.5rem;
+    max-height: calc(100vh - 160px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    color: $text-primary;
+    font-size: 0.875rem;
+}
+
+.header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.header-title {
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.header-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    opacity: 0.8;
+}
+
+.filename {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.73rem;
+    opacity: 0.75;
+}
+
+.status {
+    background: $looks-secondary;
+    color: $ui-modal-header-foreground;
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.8rem;
+}
+
+.empty-state,
+.ai-section,
+.editor-section {
+    background: $ui-secondary;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 0.85rem;
+    padding: 1rem 1.15rem;
+    box-shadow: 0 1px 3px hsla(0, 0%, 0%, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.empty-state {
+    align-items: center;
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 2rem;
+}
+
+.empty-title {
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.empty-desc {
+    max-width: 560px;
+    line-height: 1.5;
+    opacity: 0.8;
+    font-size: 0.82rem;
+}
+
+.section-title {
+    font-weight: bold;
+    font-size: 0.95rem;
+}
+
+.section-desc {
+    font-size: 0.8rem;
+    opacity: 0.72;
+    line-height: 1.45;
+}
+
+.button-row {
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.9rem;
+    border: none;
+    border-radius: 0.55rem;
+    font-weight: 600;
+    font-size: 0.83rem;
+    cursor: pointer;
+    transition: background 0.18s, filter 0.18s, transform 0.1s;
+}
+
+.action-btn:active {
+    transform: scale(0.97);
+}
+
+.primary-btn {
+    background: $looks-secondary-dark;
+    color: $ui-modal-header-foreground;
+    box-shadow: 0 2px 6px hsla(215, 100%, 50%, 0.28);
+}
+
+.primary-btn:hover {
+    filter: brightness(1.08);
+}
+
+.secondary-btn {
+    background: $ui-black-transparent;
+    color: $text-primary;
+}
+
+.secondary-btn:hover {
+    filter: brightness(0.95);
+}
+
+.template-btn {
+    background: #b45309;
+    color: $ui-modal-header-foreground;
+}
+
+.danger-btn {
+    background: #b91c1c;
+    color: #fff;
+}
+
+.textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1.5px solid $ui-black-transparent;
+    border-radius: 0.6rem;
+    padding: 0.7rem;
+    font-family: inherit;
+    font-size: 0.84rem;
+    background: $input-background;
+    color: $ui-modal-foreground;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.textarea:focus {
+    border-color: $motion-primary;
+    box-shadow: 0 0 0 3px hsla(215, 100%, 65%, 0.15);
+}
+
+.code-area {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.78rem;
+    background: #1e1e24;
+    color: #e2e8f0;
+    border-color: #2d2d38;
+}
+
+.code-area::placeholder {
+    color: #94a3b8;
+}
+
+.stage-row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+}
+
+.stage-badge {
+    background: $looks-secondary-dark;
+    color: $ui-modal-header-foreground;
+    border-radius: 1rem;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.drop-zone {
+    border: 2px dashed $ui-black-transparent;
+    border-radius: 0.7rem;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    align-items: center;
+    text-align: center;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.drop-zone.active {
+    background: hsla(215, 100%, 65%, 0.12);
+    border-color: $motion-primary;
+}
+
+.drop-icon {
+    font-size: 1.6rem;
+}
+
+.drop-text {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.hidden-input {
+    display: none;
+}
+
+.editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.body::-webkit-scrollbar,
+.textarea::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+}
+
+.body::-webkit-scrollbar-thumb {
+    background: $ui-black-transparent;
+    border-radius: 0.5rem;
+}
+
+.textarea::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 0.5rem;
+}

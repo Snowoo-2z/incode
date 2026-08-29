@@ -4,6 +4,7 @@ import classNames from 'classnames';
 
 import ModalComponent from '../modal/modal.jsx';
 import AIAgent, {PONG_GAME_TEMPLATE} from '../../lib/ai-agent/index.js';
+import ProjectDocumentation from '../../lib/project-documentation.js';
 import styles from './ai-agent-modal.css';
 
 class AIAgentModalComponent extends React.Component {
@@ -57,8 +58,15 @@ class AIAgentModalComponent extends React.Component {
         if (this.props.vm) {
             AIAgent.setVM(this.props.vm);
         }
+        ProjectDocumentation.bindToProject(this.props.projectTitle);
         this.refreshTargets();
         this.refreshOverview();
+    }
+
+    componentDidUpdate (prevProps) {
+        if (prevProps.projectTitle !== this.props.projectTitle) {
+            ProjectDocumentation.bindToProject(this.props.projectTitle);
+        }
     }
 
     refreshTargets () {
@@ -517,6 +525,7 @@ class AIAgentModalComponent extends React.Component {
 
 AIAgentModalComponent.propTypes = {
     onClose: PropTypes.func.isRequired,
+    projectTitle: PropTypes.string,
     vm: PropTypes.shape({
         runtime: PropTypes.shape({
             targets: PropTypes.array

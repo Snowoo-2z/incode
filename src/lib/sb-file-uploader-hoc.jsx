@@ -5,6 +5,7 @@ import {intlShape, injectIntl} from 'react-intl';
 import {connect} from 'react-redux';
 import log from '../lib/log';
 import sharedMessages from './shared-messages';
+import ProjectDocumentation from './project-documentation.js';
 import {setFileHandle, setProjectError} from '../reducers/tw';
 
 import {
@@ -204,6 +205,15 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                         if (filename) {
                             const uploadedProjectTitle = this.getProjectTitleFromFilename(filename);
                             this.props.onSetProjectTitle(uploadedProjectTitle);
+                            ProjectDocumentation.bindToProject(uploadedProjectTitle);
+                            // If the .sb3 contains an embedded documentation sidecar
+                            // (documentation.md/.txt/.json), load it silently.
+                            if (filename.toLowerCase().endsWith('.sb3') && this.fileToUpload) {
+                                ProjectDocumentation.importFile(this.fileToUpload)
+                                    .catch(() => {
+                                        // No embedded documentation is fine.
+                                    });
+                            }
                         }
                         this.props.vm.renderer.draw();
                         loadingSuccess = true;

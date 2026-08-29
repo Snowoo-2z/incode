@@ -84,6 +84,26 @@ L'IA répond avec un bloc `json` :
 
 ---
 
+## 📄 Documentation invisible du projet
+
+Le bouton **📄 Documentation** de la barre de menu ouvre un éditeur pour un fichier
+compagnon (`.documentation.md`) qui décrit le projet pour l'IA. Il reste à côté du
+projet et n'appartient pas au code Scratch.
+
+- Quand vous cliquez sur **Sauvegarder sur votre ordinateur**, le projet `.sb3`
+  est téléchargé **avec** la documentation incorporée ; un `.documentation.md`
+  séparé est aussi téléchargé.
+- À la réouverture d'un `.sb3`, la documentation incorporée (`documentation.md`,
+  `.txt` ou `.json`) est chargée automatiquement.
+- Le Terminal IA ajoute automatiquement cette documentation au prompt généré
+  (mode Assistant et mode Agent), ce qui évite à l'IA de redécouvrir le projet.
+- Pour créer la documentation, l'IA peut lire les sprites (`/read`), les
+  variables/listes (`/vars`) et les costumes SVG (`/costume`) — les SVG peuvent
+  contenir du texte utile. Le travail est découpé en 3 étapes pour rester dans
+  le contexte.
+- Les listes géantes (ex. 300 000 éléments) ne sont jamais envoyées en entier :
+  le prompt affiche un aperçu (30 premiers éléments + nombre total).
+
 ## 🛠 Accès direct via la console du navigateur
 
 Vous pouvez également manipuler l'agent directement depuis la console JavaScript (`F12`) :
