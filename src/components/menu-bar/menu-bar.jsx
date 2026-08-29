@@ -101,6 +101,7 @@ import ninetiesLogo from './nineties_logo.svg';
 import catLogo from './cat_logo.svg';
 import prehistoricLogo from './prehistoric-logo.svg';
 import oldtimeyLogo from './oldtimey-logo.svg';
+import scratchScriptLogo from './scratchscript-logo.svg';
 
 import sharedMessages from '../../lib/shared-messages';
 
@@ -491,6 +492,12 @@ class MenuBar extends React.Component {
                 )}
             >
                 <div className={styles.mainMenu}>
+                    <img
+                        id="logo_img"
+                        className={styles.scratchLogo}
+                        src={scratchScriptLogo}
+                        draggable={false}
+                    />
                     <div className={styles.fileGroup}>
                         {this.props.errors.length > 0 && <div>
                             <MenuLabel
