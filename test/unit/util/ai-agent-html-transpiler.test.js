@@ -393,4 +393,14 @@ describe('web mode: transpiler extras', () => {
         const ops = collectOpcodes(result.scripts.get('balle'));
         expect(ops.has('looks_say')).toBe(true);
     });
+
+    test('document.getElementById resolves to the sprite (classic DOM style)', () => {
+        const result = transpile(`
+            const balle = document.getElementById('balle');
+            whenFlag(() => { balle.move(7); });`, []);
+        const all = collectOpcodes([...result.scripts.values()].flat());
+        expect(all.has('motion_movesteps')).toBe(true);
+        expect([...result.scripts.keys()]).toContain('balle');
+        expect(result.warnings.length).toBe(0);
+    });
 });

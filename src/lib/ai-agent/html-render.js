@@ -349,26 +349,12 @@ const paintElement = (doc, el, box, overrides, warnings, defs = []) => {
         }
     }
 
-    // Text content. Only paint text the element OWNS directly (a text node
-    // child of its own), so a wrapper div containing a <p> and a <div id=sprite>
-    // does not duplicate the inner text; leaves paint it themselves.
-    const directText = [...el.childNodes]
-        .filter(n => n.nodeType === 3)
-        .map(n => n.textContent)
-        .join('')
-        .trim();
-    if (directText && tag !== 'img') {
-        const fontSize = parseFloat(st('fontSize')) || 16;
-        const color = normalizeColor(st('color')) || '#ffffff';
-        const align = st('textAlign') || 'center';
-        const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle';
-        const tx = align === 'left' ? x + 4 : align === 'right' ? x + w - 4 : x + w / 2;
-        const ty = y + h / 2 + fontSize * 0.35;
-        const weight = st('fontWeight') === 'bold' || parseFloat(st('fontWeight')) >= 600 ?
-            ' font-weight="bold"' : '';
-        out += `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" ` +
-            `font-family="sans-serif" font-size="${fontSize.toFixed(1)}" ` +
-            `fill="${escapeXml(color)}" text-anchor="${anchor}"${weight}>${escapeXml(directText)}</text>`;
+    // Text content. Text the element OWNS directly (text-node children) is
+    // painted here; text living in child ELEMENTS (<span>, <p>, <em>...) is
+    // painted when those children are recursed into, with their own computed
+    // style. <br> splits lines.
+    if (tag !== 'img') {
+        out += paintOwnedText(el, box, x, y, w, h, st);
     }
 
     // Recurse into decorative descendants.
@@ -376,6 +362,55 @@ const paintElement = (doc, el, box, overrides, warnings, defs = []) => {
         out += paintElement(doc, child, box, overrides, warnings, defs);
     }
     return out;
+};
+
+/**
+ * Builds SVG <text> markup for the text nodes an element directly owns,
+ * honouring font size/weight/italic, colour, alignment and <br> line breaks.
+ */
+const paintOwnedText = (el, box, x, y, w, h, st) => {
+    // Collect the element's own text content, converting <br> to "\n".
+    let raw = '';
+    for (const node of el.childNodes) {
+        if (node.nodeType === 3) {
+            raw += node.textContent;
+        } else if (node.nodeType === 1) {
+            const t = node.tagName.toLowerCase();
+            if (t === 'br') raw += '\n';
+            // Other inline child elements (span...) paint themselves.
+        }
+    }
+    const directText = raw.trim();
+    if (!directText) return '';
+
+    const fontSize = parseFloat(st('fontSize')) || 16;
+    const color = normalizeColor(st('color')) || '#ffffff';
+    const align = st('textAlign') || 'center';
+    const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle';
+    const tx = align === 'left' ? x + 4 : align === 'right' ? x + w - 4 : x + w / 2;
+    const weight = st('fontWeight') === 'bold' || parseFloat(st('fontWeight')) >= 600 ?
+        ' font-weight="bold"' : '';
+    const italic = st('fontStyle') === 'italic' || st('fontStyle') === 'oblique' ?
+        ' font-style="italic"' : '';
+
+    const lines = directText.split('\n').map(l => l.trim()).filter(l => l.length);
+    if (lines.length <= 1) {
+        const ty = y + h / 2 + fontSize * 0.35;
+        return `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" ` +
+            `font-family="sans-serif" font-size="${fontSize.toFixed(1)}" ` +
+            `fill="${escapeXml(color)}" text-anchor="${anchor}"${weight}${italic}>` +
+            `${escapeXml(lines[0] || directText)}</text>`;
+    }
+    // Multiple lines: vertical centring on the whole block.
+    const lineHeight = fontSize * 1.2;
+    const blockHeight = lines.length * lineHeight;
+    const startY = y + h / 2 - blockHeight / 2 + fontSize * 0.35;
+    const tspans = lines.map((line, i) =>
+        `<tspan x="${tx.toFixed(1)}" dy="${(i === 0 ? startY : lineHeight).toFixed(1)}">` +
+        `${escapeXml(line)}</tspan>`).join('');
+    return `<text x="${tx.toFixed(1)}" y="0" font-family="sans-serif" ` +
+        `font-size="${fontSize.toFixed(1)}" fill="${escapeXml(color)}" ` +
+        `text-anchor="${anchor}"${weight}${italic}>${tspans}</text>`;
 };
 
 /** Number of costumes sampled for a CSS-animated sprite. */

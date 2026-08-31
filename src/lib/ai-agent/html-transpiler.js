@@ -729,8 +729,17 @@ class Transpiler {
                 this.warn(node, `événement document "${eventName}" non supporté.`);
                 return null;
             }
-            if (method === 'getElementById') {
-                return str(0);
+            if (method === 'getElementById' || method === 'querySelector') {
+                // getElementById('balle') -> a reference to that sprite, so
+                // chaining .move(...) or passing it around works: return the
+                // sprite NAME (the same thing a bare identifier resolves to).
+                const raw = str(0) || '';
+                const id = raw.replace(/^#/, '').trim();
+                if (id) {
+                    this.registerSprite(id);
+                    return id;
+                }
+                return 0;
             }
             this.warn(node, `document.${method}() non supporté.`);
             return null;
