@@ -406,6 +406,19 @@ describe('web mode: transpiler extras', () => {
         expect(all.has('operator_length')).toBe(true);
     });
 
+    test('list.forEach iterates like for...of', () => {
+        const result = transpile(`
+            let ennemis = [1, 2, 3];
+            whenFlag(() => {
+                ennemis.forEach((e) => { balle.say(e); });
+            });`, ['balle']);
+        const all = collectOpcodes([...result.scripts.values()].flat());
+        expect(all.has('data_itemoflist')).toBe(true);
+        expect(all.has('data_lengthoflist')).toBe(true);
+        expect(all.has('control_repeat')).toBe(true);
+        expect(result.warnings.length).toBe(0);
+    });
+
     test('el.style.left/top/display/opacity map to motion/looks blocks', () => {
         const result = transpile(`
             const balle = document.getElementById('balle');

@@ -724,6 +724,37 @@ class Transpiler {
             }
         }
 
+        // list.forEach((item, index) => { ... }) -> repeat over the list, like
+        // for...of. Returns a sequence (index init + repeat block).
+        if (method === 'forEach' && obj &&
+            (this.listDecls.has(obj) ||
+                (!this.varDecls.has(obj) && !this.isSprite(obj) && obj !== 'console'))) {
+            const cb = args[0];
+            if (!cb || (cb.type !== 'ArrowFunctionExpression' &&
+                cb.type !== 'FunctionExpression')) {
+                this.warn(node, 'forEach() attend une fonction (item) => { ... }.');
+                return null;
+            }
+            // Register as a list if it was not declared.
+            if (!this.listDecls.has(obj)) this.listDecls.set(obj, []);
+            const itemVar = cb.params[0] && cb.params[0].name ?
+                cb.params[0].name : 'item';
+            let cbBodyItems = this.callbackBody(cb);
+            // If the callback has a second `(item, index)` parameter, bind it
+            // to the internal index variable.
+            if (cb.params[1] && cb.params[1].name) {
+                const indexName = cb.params[1].name;
+                this.varDecls.set(indexName, 1);
+                cbBodyItems = [
+                    blk('data_setvariableto', {
+                        VALUE: blk('data_variable', null, VAR_FIELD(`_i_${obj}`))
+                    }, VAR_FIELD(indexName)),
+                    ...cbBodyItems
+                ];
+            }
+            return {__sequence: this.buildListIteration(obj, itemVar, cbBodyItems, 'values')};
+        }
+
         // list methods (names match Scratch list blocks) - handle BEFORE the
         // implicit-sprite registration so no fake sprite gets created.
         const listOps = {
@@ -957,6 +988,34 @@ class Transpiler {
     }
 
     /**
+     * Builds a "repeat (length of list)" iteration that runs `body` for each
+     * item, binding the current item (and, for callbacks, the index) to a
+     * variable. Used by for...of / for...in and list.forEach.
+     * @returns {Array} statement items (index var init + repeat block)
+     */
+    buildListIteration (listName, itemVar, body, mode = 'values', indexVarName = null) {
+        this.varDecls.set(itemVar, 0);
+        const indexVar = indexVarName || `_i_${listName}`;
+        this.varDecls.set(indexVar, 1);
+        const lenReporter = blk('data_lengthoflist', null, LIST_FIELD(listName));
+        const indexRef = blk('data_variable', null, VAR_FIELD(indexVar));
+        const itemBlock = mode === 'values' ?
+            blk('data_setvariableto', {
+                VALUE: blk('data_itemoflist', {INDEX: indexRef}, LIST_FIELD(listName))
+            }, VAR_FIELD(itemVar)) :
+            blk('data_setvariableto', {VALUE: indexRef}, VAR_FIELD(itemVar));
+        const loopBody = [
+            itemBlock,
+            ...body,
+            blk('data_changevariableby', {VALUE: 1}, VAR_FIELD(indexVar))
+        ];
+        return [
+            {__var: indexVar, value: 1},
+            blk('control_repeat', {TIMES: lenReporter, SUBSTACK: loopBody})
+        ];
+    }
+
+    /**
      * Builds one `when key pressed` hat per key found in a keydown callback:
      *   e => { if (e.key === 'ArrowUp') raquette.changeY(8); }
      * Bodies without a key guard fall back to a flag-clicked hat.
@@ -1126,13 +1185,7 @@ class Transpiler {
         case 'ForOfStatement':
         case 'ForInStatement': {
             // for (let item of list) { ... } ->
-            //   set [indexVar] to 1
-            //   repeat (length of list) {
-            //     set item to (item (indexVar) of list)   [for...of]
-            //     <body>
-            //     change [indexVar] by 1
-            //   }
-            // for...in gives keys (indices) instead of values.
+            //   repeat (length of list) { set item to (item (index) of list); ... }
             const listName = node.right.type === 'Identifier' ? node.right.name : null;
             if (!listName || !this.listDecls.has(listName)) {
                 this.warn(node, 'boucle for...of/for...in : seul le parcours d\'une ' +
@@ -1143,28 +1196,10 @@ class Transpiler {
                 node.left.declarations[0] : null;
             const itemVar = decl ? decl.id.name :
                 (node.left.type === 'Identifier' ? node.left.name : 'item');
-            this.varDecls.set(itemVar, 0);
-            const indexVar = `_i_${listName}`;
-            this.varDecls.set(indexVar, 1);
-            const lenReporter = blk('data_lengthoflist', null, LIST_FIELD(listName));
-            const indexRef = blk('data_variable', null, VAR_FIELD(indexVar));
             const body = this.stmts(node.body.type === 'BlockStatement' ?
                 node.body.body : [node.body]);
-            const itemBlock = node.type === 'ForOfStatement' ?
-                blk('data_setvariableto', {
-                    VALUE: blk('data_itemoflist', {INDEX: indexRef}, LIST_FIELD(listName))
-                }, VAR_FIELD(itemVar)) :
-                // for...in: item = index
-                blk('data_setvariableto', {VALUE: indexRef}, VAR_FIELD(itemVar));
-            const loopBody = [
-                itemBlock,
-                ...body,
-                blk('data_changevariableby', {VALUE: 1}, VAR_FIELD(indexVar))
-            ];
-            return [
-                {__var: indexVar, value: 1},
-                blk('control_repeat', {TIMES: lenReporter, SUBSTACK: loopBody})
-            ];
+            return this.buildListIteration(listName, itemVar, body,
+                node.type === 'ForOfStatement' ? 'values' : 'keys');
         }
 
         case 'BlockStatement':
