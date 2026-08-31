@@ -406,6 +406,23 @@ describe('web mode: transpiler extras', () => {
         expect(all.has('operator_length')).toBe(true);
     });
 
+    test('el.style.left/top/display/opacity map to motion/looks blocks', () => {
+        const result = transpile(`
+            const balle = document.getElementById('balle');
+            whenFlag(() => {
+                balle.style.left = '100px';
+                balle.style.top = 50;
+                balle.style.display = 'none';
+                balle.style.opacity = 0.5;
+            });`, []);
+        const all = collectOpcodes([...result.scripts.values()].flat());
+        expect(all.has('motion_setx')).toBe(true);
+        expect(all.has('motion_sety')).toBe(true);
+        expect(all.has('looks_hide')).toBe(true);
+        expect(all.has('looks_seteffectto')).toBe(true);
+        expect(result.warnings.length).toBe(0);
+    });
+
     test('document.getElementById resolves to the sprite (classic DOM style)', () => {
         const result = transpile(`
             const balle = document.getElementById('balle');

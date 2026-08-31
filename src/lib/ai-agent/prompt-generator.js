@@ -560,6 +560,8 @@ Capteurs : balle.touching('_edge_')  (ou '_mouse_', ou un autre sprite), balle.d
 
 Tu peux écrire le JS en style DOM classique aussi :
   const balle = document.getElementById('balle'); balle.move(5);
+  balle.style.left = '100px' / .top = 50 / .display = 'none' / .opacity = 0.5
+    (left/top sont convertis depuis le coin haut-gauche vers les coordonnées Scratch) ;
   alert('game over') -> fait "dire" ; for (let en of ennemis) {...} parcourt une liste ;
   nom.charAt(0) -> lettre n°1 de nom ; Math.min/max/random/floor et requestAnimationFrame OK.
 Opérateurs : random(1, 10), round(x), abs(x), floor(x), sqrt(x), sin(x), join('a', b),

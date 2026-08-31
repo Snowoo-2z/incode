@@ -326,14 +326,24 @@ class Transpiler {
     /** obj.prop / obj['prop'] reader. */
     memberInfo (node) {
         if (!node || node.type !== 'MemberExpression') return null;
-        const objectName = node.object.type === 'Identifier' ? node.object.name : null;
+        let objectName = null;
+        let objectPath = null; // chained access: balle.style.left -> 'style'
+        if (node.object.type === 'Identifier') {
+            objectName = node.object.name;
+        } else if (node.object.type === 'MemberExpression') {
+            const inner = this.memberInfo(node.object);
+            if (inner) {
+                objectName = inner.objectName;
+                objectPath = inner.property;
+            }
+        }
         let property = null;
         if (!node.computed && node.property.type === 'Identifier') {
             property = node.property.name;
         } else if (node.computed && node.property.type === 'Literal') {
             property = node.property.value;
         }
-        return {objectName, property, object: node.object, node};
+        return {objectName, property, object: node.object, objectPath, node};
     }
 
     /** Member expression used as a reporter value. */
@@ -1298,6 +1308,60 @@ class Transpiler {
             const info = this.memberInfo(target);
             const obj = info.objectName;
             const prop = info.property;
+
+            // `el.style.left/top/display/...` DOM-style manipulation. CSS
+            // positions from the top-left become Scratch coordinates
+            // (centred); opacity maps to the ghost effect.
+            if (info.objectPath === 'style' && obj) {
+                this.registerSprite(obj);
+                const rhs = this.expr(node.right);
+                const rhsStr = this.staticString(node.right);
+                const coord = rawNode => {
+                    // '100px' / '50%' style strings -> their numeric part;
+                    // numeric expressions pass through.
+                    const staticPx = this.staticString(rawNode);
+                    if (staticPx) {
+                        const n = parseFloat(staticPx);
+                        return isFinite(n) ? n : this.expr(rawNode);
+                    }
+                    return this.expr(rawNode);
+                };
+                switch (prop) {
+                case 'left':
+                case 'x':
+                    // CSS left (from stage left edge) -> Scratch x (centred): x = left - 240.
+                    return onSprite(obj, blk('motion_setx',
+                        {X: blk('operator_subtract', {NUM1: coord(node.right), NUM2: 240})}));
+                case 'top':
+                case 'y':
+                    // CSS top (from top) -> Scratch y (up positive): y = 180 - top.
+                    return onSprite(obj, blk('motion_sety',
+                        {Y: blk('operator_subtract', {NUM1: 180, NUM2: coord(node.right)})}));
+                case 'display':
+                    if (rhsStr === 'none') return onSprite(obj, blk('looks_hide'));
+                    if (rhsStr) return onSprite(obj, blk('looks_show'));
+                    return onSprite(obj, blk('looks_show'));
+                case 'visibility':
+                    return onSprite(obj, rhsStr === 'hidden' ?
+                        blk('looks_hide') : blk('looks_show'));
+                case 'opacity': {
+                    // opacity 0..1 -> ghost effect 0..100 : ghost = (1 - opacity) * 100.
+                    const ghost = blk('operator_multiply', {
+                        NUM1: blk('operator_subtract', {NUM1: 1, NUM2: rhs}),
+                        NUM2: 100
+                    });
+                    return onSprite(obj, blk('looks_seteffectto',
+                        {VALUE: ghost}, {EFFECT: 'ghost'}));
+                }
+                case 'transform':
+                    this.warn(node, 'transform doit se régler en CSS (rotate) ou via ' +
+                        'pointInDirection().');
+                    return null;
+                default:
+                    this.warn(node, `style "${prop}" non modifiable en blocs.`);
+                    return null;
+                }
+            }
 
             // Assigning to `<identifier>.x/.y/.direction/...` IMPLICITLY targets
             // a sprite (same convention as sprite-method calls).
