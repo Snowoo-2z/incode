@@ -557,6 +557,11 @@ Clones : balle.clone() [ou clone(autreSprite)], quand un clone démarre : balle.
   puis deleteThisClone() -> utiliser balle.deleteClone()
 Capteurs : balle.touching('_edge_')  (ou '_mouse_', ou un autre sprite), balle.distanceTo(sprite),
   keyPressed('w'), mouseDown(), mouseX(), mouseY(), answer() après ask('Question ?')
+
+Tu peux écrire le JS en style DOM classique aussi :
+  const balle = document.getElementById('balle'); balle.move(5);
+  alert('game over') -> fait "dire" ; for (let en of ennemis) {...} parcourt une liste ;
+  nom.charAt(0) -> lettre n°1 de nom ; Math.min/max/random/floor et requestAnimationFrame OK.
 Opérateurs : random(1, 10), round(x), abs(x), floor(x), sqrt(x), sin(x), join('a', b),
   les opérateurs + - * / % < > === && || ! , les littéraux 'texte' et nombres.
 Fonctions : définis function tirer(vitesse) { ... } : elle est recopiée (inline) à chaque appel

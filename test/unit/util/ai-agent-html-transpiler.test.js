@@ -394,6 +394,18 @@ describe('web mode: transpiler extras', () => {
         expect(ops.has('looks_say')).toBe(true);
     });
 
+    test('string length and charAt use operator blocks', () => {
+        const result = transpile(`
+            let nom = 'bob';
+            whenFlag(() => {
+                balle.say(nom.charAt(0));
+                if (nom.length > 2) balle.move(5);
+            });`, ['balle']);
+        const all = collectOpcodes([...result.scripts.values()].flat());
+        expect(all.has('operator_letter_of')).toBe(true);
+        expect(all.has('operator_length')).toBe(true);
+    });
+
     test('document.getElementById resolves to the sprite (classic DOM style)', () => {
         const result = transpile(`
             const balle = document.getElementById('balle');

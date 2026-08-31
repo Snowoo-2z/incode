@@ -373,7 +373,13 @@ class Transpiler {
             }
         }
         if (prop === 'length') {
-            return blk('data_lengthoflist', null, LIST_FIELD(obj));
+            // A list's length vs a string's length: listDecls knows which.
+            if (obj && this.listDecls.has(obj)) {
+                return blk('data_lengthoflist', null, LIST_FIELD(obj));
+            }
+            return blk('operator_length', {
+                STRING: obj ? blk('data_variable', null, VAR_FIELD(obj)) : ''
+            });
         }
         if (node.computed) {
             return blk('data_itemoflist',
@@ -677,6 +683,37 @@ class Transpiler {
             return null;
         }
 
+        // String methods on a known scalar variable (lists are handled below).
+        if (obj && this.varDecls.has(obj) && !this.listDecls.has(obj)) {
+            const strVar = () => blk('data_variable', null, VAR_FIELD(obj));
+            switch (method) {
+            case 'charAt':
+                // charAt(i) -> letter (i+1) of string (JS 0-indexed vs Scratch 1-indexed).
+                return blk('operator_letter_of', {
+                    LETTER: blk('operator_add', {NUM1: val(0), NUM2: 1}),
+                    STRING: strVar()
+                });
+            case 'toUpperCase':
+            case 'toLowerCase':
+                // No case block in Scratch; pass the text through.
+                this.warn(node, `"${obj}.${method}()" : Scratch n'a pas de bloc de casse.`);
+                return strVar();
+            case 'trim':
+            case 'toString':
+            case 'valueOf':
+                return strVar();
+            case 'includes':
+            case 'indexOf':
+                // No string-contains/index-of block; approximate includes with
+                // a "contains" check is not available -> warn and return false.
+                this.warn(node, `"${obj}.${method}()" sur du texte non supporté ` +
+                    '(les listes ont "contient ?").');
+                return method === 'includes' ? false : -1;
+            default:
+                break;
+            }
+        }
+
         // list methods (names match Scratch list blocks) - handle BEFORE the
         // implicit-sprite registration so no fake sprite gets created.
         const listOps = {
@@ -689,7 +726,10 @@ class Transpiler {
             indexOf: 'itemNum'
         };
         const listOp = listOps[method];
-        if (listOp) {
+        // Only treat these as list operations on a DECLARED list; otherwise
+        // (e.g. an unknown object) they fall through to sprite/unknown.
+        if (listOp && obj && (this.listDecls.has(obj) ||
+            (!this.varDecls.has(obj) && !this.isSprite(obj) && obj !== 'console'))) {
             switch (listOp) {
             case 'add':
                 return blk('data_addtolist', {ITEM: val(0)}, LIST_FIELD(obj));
