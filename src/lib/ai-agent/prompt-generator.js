@@ -484,6 +484,11 @@ automatiquement converti : le centre de la scène = (0,0) en Scratch.
   visuel que tu veux.
 - Un <button> avec des états :hover/:active reçoit automatiquement plusieurs costumes et
   les blocs qui les permutent.
+- Une animation CSS (@keyframes / animation / transition) appliquée à un élément avec id est
+  capturée image par image : l'élément reçoit plusieurs costumes et une boucle qui les fait
+  défiler au même rythme. Tu peux donc animer un héros qui marche, une porte qui s'ouvre, un
+  ennemi qui clignote... directement en CSS. Les décorations sans id (titres, panneaux de fond)
+  vont dans le décor de la scène et ne deviennent pas des sprites.
 
 ## JS = les blocs
 Le JS doit rester SIMPLE et "façon Scratch" : variables globales, if/else, for/while,
@@ -500,6 +505,12 @@ fonctions simples. PAS de classes, de closures avancées, de fetch, de DOM vivan
   wait(1)                            // attendre 1 seconde (dans une boucle)
   waitUntil(condition)               // attendre jusqu'à
   stopAll()                          // tout arrêter
+  switch (etat) { case 1: ...; break; case 2: ...; default: ... }
+  setInterval(() => { ... }, 33)     // = forever + attendre (33 ms -> 0.03 s)
+  setTimeout(() => { ... }, 500)     // = attendre 0.5 s puis faire
+  Math.floor(x), Math.ceil(x), Math.round(x), Math.abs(x), Math.sqrt(x),
+    Math.sin(a), Math.cos(a), Math.max(a,b), Math.min(a,b), Math.random(),
+    Math.PI                           // fonctions mathématiques Scratch
 
 ### Événements
   sprite.onClick(() => { ... })      // quand ce sprite est cliqué
@@ -512,7 +523,12 @@ fonctions simples. PAS de classes, de closures avancées, de fetch, de DOM vivan
 ### Variables et listes
   let score = 0            -> variable Scratch (affichée avec showVariable('score'))
   let ennemis = [1, 2, 3]  -> liste Scratch
-  score += 1 ; score = score + 1 ; ennemis.push(5)
+  score += 1 ; score *= 2 ; score -= 5 ; score = score + 1
+  ennemis.push(5)          (ajouter)
+  ennemis.pop()            (supprimer le dernier)  ; ennemis.shift() (le premier)
+  ennemis.insert(0, x)     ; ennemis.clear()
+  if (ennemis.includes(5)) { ... }
+  let x = ennemis[2] ; let n = ennemis.length
 
 ### API des sprites (le nom = l'id HTML)
 Mouvement : balle.move(7), balle.bounce(), balle.gotoXy(x,y), balle.changeX(3),

@@ -158,21 +158,44 @@ const transpileWebProject = source => {
 
     // ---- 5. Button hover/active costume swapping --------------------------
     for (const sprite of scene.sprites || []) {
-        if (!sprite.button || sprite.costumes.length < 2) continue;
-        const hasHover = sprite.costumes.some(c => c.name === 'survol');
-        const hasActive = sprite.costumes.some(c => c.name === 'actif');
-        const blocks = [
-            {opcode: 'event_whenflagclicked'},
-            {opcode: 'looks_switchcostumeto', inputs: {COSTUME: 'costume1'}},
-            {
-                opcode: 'control_forever',
-                inputs: {
-                    SUBSTACK: buildButtonStateBlocks(hasHover, hasActive)
-                }
+        if (sprite.button && sprite.costumes.length >= 2) {
+            const hasHover = sprite.costumes.some(c => c.name === 'survol');
+            const hasActive = sprite.costumes.some(c => c.name === 'actif');
+            if (hasHover || hasActive) {
+                const blocks = [
+                    {opcode: 'event_whenflagclicked'},
+                    {opcode: 'looks_switchcostumeto', inputs: {COSTUME: 'costume1'}},
+                    {
+                        opcode: 'control_forever',
+                        inputs: {
+                            SUBSTACK: buildButtonStateBlocks(hasHover, hasActive, sprite)
+                        }
+                    }
+                ];
+                actions.push({type: 'ADD_SCRIPT', sprite: sprite.name, blocks});
+                scriptsCount++;
             }
-        ];
-        actions.push({type: 'ADD_SCRIPT', sprite: sprite.name, blocks});
-        scriptsCount++;
+        }
+
+        // ---- 5b. CSS animation playback: cycle through the captured frames.
+        if (sprite.animationFrames && sprite.animationFrames > 1) {
+            const delay = Number.isFinite(sprite.frameDelay) ?
+                Math.max(0.02, Math.round(sprite.frameDelay * 100) / 100) : 0.1;
+            const blocks = [
+                {opcode: 'event_whenflagclicked'},
+                {
+                    opcode: 'control_forever',
+                    inputs: {
+                        SUBSTACK: [
+                            {opcode: 'looks_nextcostume'},
+                            {opcode: 'control_wait', inputs: {DURATION: delay}}
+                        ]
+                    }
+                }
+            ];
+            actions.push({type: 'ADD_SCRIPT', sprite: sprite.name, blocks});
+            scriptsCount++;
+        }
     }
 
     // Stats (sprite count includes JS-only/implicit sprites)
@@ -196,7 +219,7 @@ const transpileWebProject = source => {
 /**
  * Builds the forever-loop blocks that mimic :hover/:active with costumes.
  */
-const buildButtonStateBlocks = (hasHover, hasActive) => {
+const buildButtonStateBlocks = (hasHover, hasActive, sprite) => {
     const blocks = [];
     if (hasActive) {
         blocks.push({
@@ -206,7 +229,7 @@ const buildButtonStateBlocks = (hasHover, hasActive) => {
                     opcode: 'operator_and',
                     inputs: {
                         OPERAND1: {opcode: 'sensing_mousedown'},
-                        OPERAND2: mouseOverReporter()
+                        OPERAND2: mouseOverReporter(sprite)
                     }
                 },
                 SUBSTACK: [
@@ -219,9 +242,9 @@ const buildButtonStateBlocks = (hasHover, hasActive) => {
         blocks.push({
             opcode: 'control_if',
             inputs: {
-                CONDITION: mouseOverReporter(),
+                CONDITION: mouseOverReporter(sprite),
                 SUBSTACK: [
-                    {opcode: 'looks_switchcostumeto', inputs: {COSTUME: hasActive ? 'survol' : 'survol'}}
+                    {opcode: 'looks_switchcostumeto', inputs: {COSTUME: 'survol'}}
                 ]
             }
         });
@@ -232,7 +255,7 @@ const buildButtonStateBlocks = (hasHover, hasActive) => {
         inputs: {
             CONDITION: {
                 opcode: 'operator_not',
-                inputs: {OPERAND: mouseOverReporter()}
+                inputs: {OPERAND: mouseOverReporter(sprite)}
             },
             SUBSTACK: [
                 {opcode: 'looks_switchcostumeto', inputs: {COSTUME: 'costume1'}}
@@ -244,15 +267,27 @@ const buildButtonStateBlocks = (hasHover, hasActive) => {
 
 /**
  * "Mouse over this sprite" -> Scratch has no direct block; approximate with
- * distance to mouse pointer < half the costume diagonal.
+ * distance to the mouse pointer below a threshold sized to the costume.
+ * @param {object} sprite sprite descriptor with costume width/height
  */
-const mouseOverReporter = () => ({
-    opcode: 'operator_lt',
-    inputs: {
-        OPERAND1: {opcode: 'sensing_distanceto', fields: {DISTANCETOMENU: '_mouse_'}},
-        OPERAND2: 60
-    }
-});
+const mouseOverReporter = sprite => {
+    // The costumes were painted from the element's CSS box; the first costume
+    // size gives the on-stage dimension. A threshold slightly larger than half
+    // the diagonal makes the hover trigger over the button itself.
+    const firstCostume = sprite && sprite.costumes && sprite.costumes[0];
+    const m = firstCostume && firstCostume.svg ?
+        firstCostume.svg.match(/width="([\d.]+)"\s+height="([\d.]+)"/) : null;
+    const w = m ? parseFloat(m[1]) : 100;
+    const h = m ? parseFloat(m[2]) : 100;
+    const threshold = Math.round(Math.hypot(w, h) * 0.75);
+    return {
+        opcode: 'operator_lt',
+        inputs: {
+            OPERAND1: {opcode: 'sensing_distanceto', fields: {DISTANCETOMENU: '_mouse_'}},
+            OPERAND2: threshold
+        }
+    };
+};
 
 /**
  * Adds a "don't rotate" style block at the start of flag scripts of sprites,

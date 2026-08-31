@@ -245,6 +245,14 @@ class Transpiler {
         }
         const {objectName: obj, property: prop} = info;
 
+        // Math constants.
+        if (obj === 'Math' || obj === 'math') {
+            if (prop === 'PI') return Math.PI;
+            if (prop === 'E') return Math.E;
+            this.warn(node, `Math.${prop} : constante non reconnue.`);
+            return 0;
+        }
+
         // A `<identifier>.x/.y/.direction/...` read IMPLICITLY names a sprite.
         const spriteProps = new Set(['x', 'y', 'direction', 'size', 'costume', 'costumeNumber']);
         if (this.isSprite(obj) || (obj && spriteProps.has(prop) &&
@@ -409,6 +417,24 @@ class Transpiler {
         case 'e ^': case '10 ^':
             return blk('operator_mathop', {NUM: val(0)}, {OPERATOR: name});
 
+        // ---- timers / game loops ----
+        case 'setInterval': {
+            // setInterval(cb, ms) -> forever { <body>; wait(ms/1000) }
+            const seconds = args[1] ?
+                blk('operator_divide', {NUM1: val(1), NUM2: 1000}) : 0.03;
+            return {__control: 'forever',
+                body: [...body(0), blk('control_wait', {DURATION: seconds})]};
+        }
+        case 'setTimeout': {
+            // setTimeout(cb, ms) -> wait(ms/1000) then <body> once.
+            const seconds = args[1] ?
+                blk('operator_divide', {NUM1: val(1), NUM2: 1000}) : 0;
+            return {__sequence: [blk('control_wait', {DURATION: seconds}), ...body(0)]};
+        }
+        case 'clearInterval':
+        case 'clearTimeout':
+            return null;
+
         // ---- variables ----
         case 'showVariable': {
             const vName = str(0);
@@ -458,6 +484,87 @@ class Transpiler {
 
         // console.log -> ignored
         if (obj === 'console') return null;
+
+        // Math.* static helpers.
+        if (obj === 'Math' || obj === 'math') {
+            const mathOps = ['abs', 'floor', 'ceiling', 'sqrt', 'sin', 'cos',
+                'tan', 'asin', 'acos', 'atan', 'ln', 'log', 'e ^', '10 ^'];
+            const opMap = {ceil: 'ceiling', asin: 'asin', acos: 'acos'};
+            const blockOp = opMap[method] || method;
+            if (mathOps.includes(blockOp)) {
+                return blk('operator_mathop', {NUM: val(0)}, {OPERATOR: blockOp});
+            }
+            if (method === 'random') {
+                // Math.random() -> random 0..1 (whole/round semantics preserved).
+                return blk('operator_random', {FROM: 0, TO: 1});
+            }
+            if (method === 'round') {
+                return blk('operator_round', {NUM: val(0)});
+            }
+            if (method === 'min' || method === 'max') {
+                this.warn(node, `Math.${method}() : pas de bloc correspondant ` +
+                    '(utilise if/else sur la comparaison).');
+                return 0;
+            }
+            if (method === 'pow' || method === 'power') {
+                // No generic pow block: e^x is available, nothing else.
+                this.warn(node, 'Math.pow() non supporté (seuls e^, sin, sqrt... existent en bloc).');
+                return 0;
+            }
+            this.warn(node, `Math.${method}() non reconnu.`);
+            return 0;
+        }
+
+        // Math.PI read as a member reporter.
+        // (handled in memberReporter)
+
+        // window timers: window.setInterval(cb, ms).
+        if (obj === 'window' && (method === 'setInterval' || method === 'setTimeout')) {
+            return this.globalCall({...node,
+                callee: {type: 'Identifier', name: method}});
+        }
+        if (obj === 'window' && (method === 'clearInterval' || method === 'clearTimeout')) {
+            return null;
+        }
+
+        // list methods (names match Scratch list blocks) - handle BEFORE the
+        // implicit-sprite registration so no fake sprite gets created.
+        const listOps = {
+            push: 'add', add: 'add', append: 'add',
+            pop: 'deleteLast', shift: 'deleteFirst',
+            clear: 'deleteAll', empty: 'deleteAll',
+            insert: 'insert', splice: 'insert',
+            get: 'item', index: 'itemOf',
+            includes: 'contains', has: 'contains',
+            indexOf: 'itemNum'
+        };
+        const listOp = listOps[method];
+        if (listOp) {
+            switch (listOp) {
+            case 'add':
+                return blk('data_addtolist', {ITEM: val(0)}, LIST_FIELD(obj));
+            case 'deleteLast':
+                return blk('data_deleteoflist',
+                    {INDEX: blk('data_lengthoflist', null, LIST_FIELD(obj))}, LIST_FIELD(obj));
+            case 'deleteFirst':
+                return blk('data_deleteoflist', {INDEX: 1}, LIST_FIELD(obj));
+            case 'deleteAll':
+                return blk('data_deletealloflist', null, LIST_FIELD(obj));
+            case 'insert':
+                return blk('data_insertatlist',
+                    {ITEM: val(0), INDEX: args.length > 1 ? val(1) : 1}, LIST_FIELD(obj));
+            case 'item':
+            case 'itemOf':
+                return blk('data_itemoflist',
+                    {INDEX: val(0)}, LIST_FIELD(obj));
+            case 'contains':
+                return blk('data_listcontainsitem', {ITEM: val(0)}, LIST_FIELD(obj));
+            case 'itemNum':
+                return blk('data_itemnumoflist', {ITEM: val(0)}, LIST_FIELD(obj));
+            default:
+                break;
+            }
+        }
 
         // document / window
         if (obj === 'document' || obj === 'window') {
@@ -810,6 +917,37 @@ class Transpiler {
         case 'BlockStatement':
             return this.stmts(node.body);
 
+        case 'SwitchStatement': {
+            // switch(x) { case 'a': ...; break; case 'b': ...; }
+            // -> if (x == 'a') {...} else if (x == 'b') {...} (else: default).
+            const discriminant = this.expr(node.discriminant);
+            let current = null;
+            let defaultBody = null;
+            // Build from the LAST case backwards so we can chain else blocks.
+            const cases = node.cases;
+            for (let i = cases.length - 1; i >= 0; i--) {
+                const c = cases[i];
+                const statements = this.stmts(c.consequent.filter(s =>
+                    s.type !== 'BreakStatement'));
+                const body = statements.concat(current || []);
+                if (c.test === null) {
+                    defaultBody = body;
+                    continue;
+                }
+                const spec = blk(current || defaultBody ? 'control_if_else' : 'control_if', {
+                    CONDITION: blk('operator_equals',
+                        {OPERAND1: discriminant, OPERAND2: this.expr(c.test)}),
+                    SUBSTACK: body
+                });
+                if (current || defaultBody) {
+                    spec.inputs.SUBSTACK2 = current || defaultBody;
+                }
+                current = [spec];
+            }
+            if (!current && defaultBody) return defaultBody;
+            return current;
+        }
+
         case 'ReturnStatement':
             this.warn(node, 'return non supporté : utilise une variable globale pour sortir une valeur.');
             return null;
@@ -851,6 +989,7 @@ class Transpiler {
             if (result.__hat) return result;
             if (result.__multiHat) return result.__multiHat;
             if (result.__control) return this.controlBlock(result);
+            if (result.__sequence) return result.__sequence;
             if (result.__inline) return this.inlineFunction(result.__inline, result.args);
             if (result.opcode) return result;
             return null;
@@ -886,14 +1025,22 @@ class Transpiler {
         if (target.type === 'Identifier') {
             const name = target.name;
             const rhs = this.expr(node.right);
+            this.varDecls.set(name, this.varDecls.get(name) ?? 0);
             if (node.operator === '+=') {
-                this.varDecls.set(name, this.varDecls.get(name) ?? 0);
                 return blk('data_changevariableby', {VALUE: rhs}, VAR_FIELD(name));
             }
             if (node.operator === '-=') {
-                this.varDecls.set(name, this.varDecls.get(name) ?? 0);
                 return blk('data_changevariableby',
                     {VALUE: blk('operator_subtract', {NUM1: 0, NUM2: rhs})}, VAR_FIELD(name));
+            }
+            // *=, /=, %= : reassign with the binary operation.
+            const compound = {'*=': 'operator_multiply', '/=': 'operator_divide',
+                '%=': 'operator_mod'};
+            const oldRef = () => blk('data_variable', null, VAR_FIELD(name));
+            if (compound[node.operator]) {
+                return blk('data_setvariableto',
+                    {VALUE: blk(compound[node.operator], {NUM1: oldRef(), NUM2: rhs})},
+                    VAR_FIELD(name));
             }
             this.varDecls.set(name, rhs);
             return blk('data_setvariableto', {VALUE: rhs}, VAR_FIELD(name));
@@ -1100,6 +1247,22 @@ class Transpiler {
             out.get(key).push(block);
         };
 
+        // Neutral blocks (a wait, a score update...) follow the flow they are
+        // part of: in a sequence like `wait(1); balle.say('x')`, the wait
+        // belongs to the same sprite as the statement right after/before it,
+        // so it stays adjacent to it in the generated script.
+        const findNearestSprite = index => {
+            for (let j = index; j < items.length; j++) {
+                const s = items[j] && (items[j].__sprite || this.blockDirectSprite(items[j]));
+                if (s) return String(s).toLowerCase();
+            }
+            for (let j = index; j >= 0; j--) {
+                const s = items[j] && (items[j].__sprite || this.blockDirectSprite(items[j]));
+                if (s) return String(s).toLowerCase();
+            }
+            return null;
+        };
+
         const cloneBlock = block => {
             const clean = value => {
                 if (!value || typeof value !== 'object') return value;
@@ -1195,9 +1358,12 @@ class Transpiler {
             }
 
             // Regular statement: route by its own tag, or the sprite directly
-            // referenced by its reporters, or the fallback (stage at top
-            // level, hat owner inside a hat body).
-            const owner = item.__sprite || this.blockDirectSprite(item) || fallback;
+            // referenced by its reporters, or a nearby sprite statement in
+            // the same sequence (so `wait(1); balle.say('x')` stays together),
+            // or the fallback (stage at top level, hat owner inside a hat).
+            const index = items.indexOf(item);
+            const owner = item.__sprite || this.blockDirectSprite(item) ||
+                findNearestSprite(index) || fallback;
             add(owner, item);
         }
 

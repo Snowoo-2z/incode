@@ -110,7 +110,11 @@ const renderDocument = (html, css) => {
 
 /**
  * Decides whether an element should become its own Sprite.
- * Rule: it has an `id`, or it is an inherently interactive/visual tag.
+ * Rule: it has an `id`, OR it is an inherently interactive/visual tag
+ * (`<button>`, `<img>`...). Decorative elements (a coloured `<div>` panel with
+ * no id, a title `<h1>`...) are NOT sprites: they are painted into the stage
+ * backdrop so the scene keeps its background look without flooding the sprite
+ * list with non-interactive objects.
  * @param {Element} el DOM element
  * @returns {boolean}
  */
@@ -118,14 +122,23 @@ const isSpriteElement = el => {
     const tag = el.tagName.toLowerCase();
     if (CONTAINER_TAGS.has(tag)) return false;
     if (SPRITE_TAGS.has(tag)) return true;
-    if (el.id) return true;
-    // A positioned element with a visible background and size also counts.
-    const style = getComputedStyle(el);
-    const rect = el.getBoundingClientRect();
-    const hasBg = style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
-        style.backgroundColor !== 'transparent';
-    if (hasBg && rect.width >= 8 && rect.height >= 8) return true;
-    return false;
+    return Boolean(el.id);
+};
+
+/**
+ * Reads the rotation (degrees, CSS `transform: rotate(...)`) applied to an
+ * element. Scratch direction matches CSS degrees (90 = pointing right) for
+ * the "all around" rotation style, so the value is passed through.
+ * @param {CSSStyleDeclaration} style computed style
+ * @returns {number} direction in degrees (90 = default Scratch)
+ */
+const readRotation = style => {
+    const match = String(style && style.transform || '').match(/rotate\(\s*([-\d.]+)deg/);
+    if (match) {
+        const deg = parseFloat(match[1]);
+        if (isFinite(deg)) return ((deg % 360) + 360) % 360;
+    }
+    return 90;
 };
 
 /**
@@ -365,6 +378,125 @@ const paintElement = (doc, el, box, overrides, warnings, defs = []) => {
     return out;
 };
 
+/** Number of costumes sampled for a CSS-animated sprite. */
+const ANIMATION_FRAMES = 6;
+/** Longest animation sampled (seconds); longer loops are truncated. */
+const MAX_ANIMATION_SECONDS = 3;
+
+/**
+ * Returns the Web Animations running on an element itself (not descendants),
+ * as plain objects so they can be paused/restored robustly.
+ */
+const ownAnimations = (el, doc) => {
+    if (typeof el.getAnimations !== 'function') return [];
+    try {
+        return el.getAnimations({subtree: false}).filter(a =>
+            a.playState === 'running' || a.playState === 'paused');
+    } catch (e) {
+        return [];
+    }
+};
+
+/**
+ * Samples an animated sprite into several costumes: CSS `@keyframes` / CSS
+ * transitions animate over time; we capture the element (and its descendants,
+ * clipped to the sprite box) at N equally spaced points of the animation loop
+ * and return one SVG per frame, painted against the UNION box so no frame
+ * crops the element.
+ *
+ * @param {Element} el animated sprite element
+ * @param {DOMRect} baseRect element's base rect
+ * @param {Set} spriteSet all sprite elements (skip nested sprites)
+ * @param {Document} doc iframe document
+ * @param {Array<string>} warnings accumulator
+ * @returns {?{costumes: Array<{name: string, svg: string}>, box: DOMRect}}
+ */
+const captureAnimationFrames = (el, baseRect, spriteSet, doc, warnings) => {
+    if (typeof el.getAnimations !== 'function') return null;
+
+    const animations = ownAnimations(el, doc);
+    if (!animations.length) return null;
+
+    // Only CSS keyframe animations / transitions applied to the element
+    // itself (descendant animations animate separate nodes, which are painted
+    // in place already).
+    const effects = animations.filter(a => a.effect && typeof a.effect.getTiming === 'function');
+    if (!effects.length) return null;
+
+    const totalDuration = effects.reduce((max, a) => {
+        const timing = a.effect.getTiming();
+        // duration is in ms for WAAPI, or null for auto.
+        const d = typeof timing.duration === 'number' ? timing.duration / 1000 : 0;
+        const iterations = timing.iterations === Infinity ? 1 : (timing.iterations || 1);
+        return Math.max(max, d * iterations);
+    }, 0);
+    const cycleSeconds = Math.min(totalDuration || 1, MAX_ANIMATION_SECONDS);
+    const cycleMs = Math.max(100, cycleSeconds * 1000);
+
+    // Measure the union box: the element may translate/scale across frames.
+    const pausedStates = effects.map(a => ({a, wasPaused: a.playState === 'paused'}));
+    let union = {left: baseRect.left, top: baseRect.top,
+        right: baseRect.right, bottom: baseRect.bottom};
+    const sampleBox = (offsetMs) => {
+        for (const {a} of pausedStates) {
+            try {
+                a.pause();
+                a.currentTime = offsetMs;
+            } catch (e) { /* ignore */ }
+        }
+        const rect = el.getBoundingClientRect();
+        union = {
+            left: Math.min(union.left, rect.left),
+            top: Math.min(union.top, rect.top),
+            right: Math.max(union.right, rect.right),
+            bottom: Math.max(union.bottom, rect.bottom)
+        };
+        return rect;
+    };
+    // Probe the frames once to compute the union box.
+    for (let i = 0; i < ANIMATION_FRAMES; i++) {
+        sampleBox((cycleMs / ANIMATION_FRAMES) * i);
+    }
+    const unionW = union.right - union.left;
+    const unionH = union.bottom - union.top;
+
+    const box = {
+        left: union.left, top: union.top,
+        width: unionW, height: unionH,
+        __el: el, __sprites: spriteSet, __width: unionW, __height: unionH
+    };
+
+    // Paint each frame against the union box.
+    const costumes = [];
+    for (let i = 0; i < ANIMATION_FRAMES; i++) {
+        sampleBox((cycleMs / ANIMATION_FRAMES) * i);
+        const defs = [];
+        const body = paintElement(doc, el, box, null, warnings, defs);
+        costumes.push({
+            name: `frame${i + 1}`,
+            svg: wrapSvg(unionW, unionH, body, defs)
+        });
+    }
+
+    // Restore the animations.
+    for (const {a, wasPaused} of pausedStates) {
+        try {
+            if (wasPaused) a.pause();
+            else {
+                a.play();
+                a.currentTime = 0;
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    return {
+        costumes,
+        box,
+        frameCount: ANIMATION_FRAMES,
+        delaySeconds: cycleSeconds / ANIMATION_FRAMES
+    };
+};
+
 /**
  * True when the element is contained inside (or is) one of the sprite
  * elements: such elements already belong to a sprite costume, so they must not
@@ -472,45 +604,64 @@ const extractScene = source => {
         const button = el.tagName.toLowerCase() === 'button' ||
             el.getAttribute('role') === 'button';
 
+        // CSS animations / transitions: capture a sequence of costumes and
+        // the frame delay to play them back. Non-interactive (not a button).
+        const animation = button ? null :
+            captureAnimationFrames(el, rect, spriteSet, doc, warnings);
+
+        const boxRect = animation ? animation.box : rect;
+
         // CSS coordinates are top-left based; Scratch is center based with Y
-        // pointing UP.
-        const cx = rect.left + rect.width / 2 - STAGE_WIDTH / 2;
-        const cy = STAGE_HEIGHT / 2 - (rect.top + rect.height / 2);
+        // pointing UP. For animations, the union box's center is the sprite
+        // center so all frames share the same rotation point.
+        const cx = boxRect.left + boxRect.width / 2 - STAGE_WIDTH / 2;
+        const cy = STAGE_HEIGHT / 2 - (boxRect.top + boxRect.height / 2);
         const visible = style.display !== 'none' && style.visibility !== 'hidden' &&
             rect.width > 0 && rect.height > 0;
 
-        // Paint the element (and its decorative children) into a local box.
-        const box = rect;
-        box.__el = el;
-        box.__sprites = spriteSet;
-        const defs = [];
-        const baseBody = paintElement(doc, el, box, null, warnings, defs);
-        const costumes = [{
-            name: 'costume1',
-            svg: wrapSvg(rect.width, rect.height, baseBody, defs)
-        }];
+        let costumes;
+        let animationFrames = null;
+        let frameDelay = null;
+        if (animation) {
+            // The captured frames REPLACE the single base costume: they cover
+            // the whole loop and are replayed by the generated blocks.
+            costumes = animation.costumes;
+            animationFrames = animation.frameCount;
+            frameDelay = animation.delaySeconds;
+        } else {
+            // Paint the element (and its decorative children) into a local box.
+            const box = rect;
+            box.__el = el;
+            box.__sprites = spriteSet;
+            const defs = [];
+            const baseBody = paintElement(doc, el, box, null, warnings, defs);
+            costumes = [{
+                name: 'costume1',
+                svg: wrapSvg(rect.width, rect.height, baseBody, defs)
+            }];
 
-        // Interactive states: when the page defines :hover / :active for this
-        // element, capture the look as extra costumes so the generated blocks
-        // can swap them like a real button.
-        if (button) {
-            const hoverRules = pseudoStyle(doc, el, ':hover');
-            const activeRules = pseudoStyle(doc, el, ':active');
-            if (hoverRules) {
-                const hoverDefs = [];
-                costumes.push({
-                    name: 'survol',
-                    svg: wrapSvg(rect.width, rect.height,
-                        paintElement(doc, el, box, hoverRules, warnings, hoverDefs), hoverDefs)
-                });
-            }
-            if (activeRules) {
-                const activeDefs = [];
-                costumes.push({
-                    name: 'actif',
-                    svg: wrapSvg(rect.width, rect.height,
-                        paintElement(doc, el, box, activeRules, warnings, activeDefs), activeDefs)
-                });
+            // Interactive states: when the page defines :hover / :active for
+            // this element, capture the look as extra costumes so the blocks
+            // can swap them like a real button.
+            if (button) {
+                const hoverRules = pseudoStyle(doc, el, ':hover');
+                const activeRules = pseudoStyle(doc, el, ':active');
+                if (hoverRules) {
+                    const hoverDefs = [];
+                    costumes.push({
+                        name: 'survol',
+                        svg: wrapSvg(rect.width, rect.height,
+                            paintElement(doc, el, box, hoverRules, warnings, hoverDefs), hoverDefs)
+                    });
+                }
+                if (activeRules) {
+                    const activeDefs = [];
+                    costumes.push({
+                        name: 'actif',
+                        svg: wrapSvg(rect.width, rect.height,
+                            paintElement(doc, el, box, activeRules, warnings, activeDefs), activeDefs)
+                    });
+                }
             }
         }
 
@@ -518,10 +669,12 @@ const extractScene = source => {
             name,
             x: Math.round(cx),
             y: Math.round(cy),
-            direction: 90,
+            direction: animation ? readRotation(style) : readRotation(style),
             visible,
             costumes,
-            button
+            button,
+            animationFrames,
+            frameDelay
         };
     }).filter(s => {
         // Drop zero-size / display:none elements that could not be measured.

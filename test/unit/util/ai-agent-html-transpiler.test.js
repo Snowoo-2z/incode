@@ -218,3 +218,95 @@ describe('web mode: project assembly (no DOM)', () => {
         expect(parts.html).not.toContain('<script');
     });
 });
+
+describe('web mode: transpiler extras', () => {
+    test('Math.random/floor/abs become operator blocks', () => {
+        const result = transpile(`
+            whenFlag(() => {
+                balle.x = Math.floor(Math.random() * 100) - 50;
+                balle.y = Math.abs(-3);
+            });`, ['balle']);
+        const ops = collectOpcodes(result.scripts.get('balle'));
+        expect(ops.has('operator_mathop')).toBe(true);
+        expect(ops.has('operator_multiply')).toBe(true);
+        expect(ops.has('operator_subtract')).toBe(true);
+        expect(ops.has('motion_setx')).toBe(true);
+        expect(result.warnings.filter(w => /Math/.test(w)).length).toBe(0);
+    });
+
+    test('setInterval becomes forever + wait', () => {
+        const result = transpile(`
+            setInterval(() => { balle.move(2); }, 16);`, ['balle']);
+        const ops = collectOpcodes(result.scripts.get('balle'));
+        expect(ops.has('control_forever')).toBe(true);
+        expect(ops.has('control_wait')).toBe(true);
+        expect(ops.has('operator_divide')).toBe(true); // ms / 1000
+        expect(ops.has('motion_movesteps')).toBe(true);
+    });
+
+    test('setTimeout becomes wait then body', () => {
+        const result = transpile(`
+            whenFlag(() => {
+                setTimeout(() => { balle.say('pret'); }, 1000);
+            });`, ['balle']);
+        const ops = collectOpcodes(result.scripts.get('balle'));
+        expect(ops.has('control_wait')).toBe(true);
+        expect(ops.has('looks_say')).toBe(true);
+    });
+
+    test('compound *= assignment becomes set with multiply', () => {
+        const result = transpile(`
+            whenFlag(() => {
+                points *= 2;
+                ennemis.push(5);
+            });`, ['balle']);
+        const all = collectOpcodes([...result.scripts.values()].flat());
+        expect(all.has('operator_multiply')).toBe(true);
+        expect(all.has('data_setvariableto')).toBe(true);
+        expect(all.has('data_addtolist')).toBe(true);
+    });
+
+    test('list methods map to list blocks', () => {
+        const result = transpile(`
+            whenFlag(() => {
+                ennemis.push(7);
+                ennemis.pop();
+                ennemis.clear();
+                if (ennemis.includes(7)) balle.say('touche');
+            });`, ['balle']);
+        const all = collectOpcodes([...result.scripts.values()].flat());
+        expect(all.has('data_addtolist')).toBe(true);
+        expect(all.has('data_deleteoflist')).toBe(true);
+        expect(all.has('data_deletealloflist')).toBe(true);
+        expect(all.has('data_listcontainsitem')).toBe(true);
+    });
+
+    test('switch/case becomes nested if/else', () => {
+        const result = transpile(`
+            whenFlag(() => {
+                switch (etat) {
+                    case 'a': balle.move(1); break;
+                    case 'b': balle.move(2); break;
+                    default: balle.move(3);
+                }
+            });`, ['balle']);
+        const ops = collectOpcodes(result.scripts.get('balle'));
+        expect(ops.has('control_if_else')).toBe(true);
+        expect(ops.has('operator_equals')).toBe(true);
+    });
+
+    test('else-if chains are supported', () => {
+        const result = transpile(`
+            whenFlag(() => {
+                if (balle.x > 100) {
+                    balle.say('droite');
+                } else if (balle.x < -100) {
+                    balle.say('gauche');
+                } else {
+                    balle.say('milieu');
+                }
+            });`, ['balle']);
+        const ops = collectOpcodes(result.scripts.get('balle'));
+        expect(ops.has('control_if_else')).toBe(true);
+    });
+});
