@@ -287,19 +287,33 @@ const executeAction = async (action, vm, log) => {
         const spriteName = action.name || action.spriteName || 'Sprite';
         let target = findTarget(vm, spriteName);
 
+        // The AI (or the web/HTML mode) may ship its own costumes along with
+        // the sprite: in that case we must NOT add the default guessed shape
+        // on top of them, otherwise the sprite keeps an extra square costume.
+        const hasOwnCostumes = Array.isArray(action.costumes) && action.costumes.length > 0;
+
         if (!target) {
             const emptyItem = emptySprite(spriteName, 'pop', 'costume1');
             if (action.x !== undefined) emptyItem.scratchX = Number(action.x);
             if (action.y !== undefined) emptyItem.scratchY = Number(action.y);
 
-            await vm.addSprite(JSON.stringify(emptyItem));
-            target = findTarget(vm, spriteName);
-            // emptySprite() has a blank costume: give the sprite a visible
-            // shape, otherwise it is invisible on the stage.
             try {
-                await applyDefaultCostume(vm, target, action.shape, action.color);
+                await vm.addSprite(JSON.stringify(emptyItem));
             } catch (e) {
-                log(`⚠ Costume par défaut non appliqué à "${spriteName}" : ${e.message}`);
+                // See ADD_SCRIPT: addSprite can reject even though the target
+                // was created (blank costume asset load failure). Look it up.
+                log(`ℹ AddSprite a renvoyé une erreur pour "${spriteName}" : ${e && e.message} ` +
+                    '(vérification de la cible...)');
+            }
+            target = findTarget(vm, spriteName);
+            if (!hasOwnCostumes) {
+                // emptySprite() has a blank costume: give the sprite a visible
+                // shape, otherwise it is invisible on the stage.
+                try {
+                    await applyDefaultCostume(vm, target, action.shape, action.color);
+                } catch (e) {
+                    log(`⚠ Costume par défaut non appliqué à "${spriteName}" : ${e.message}`);
+                }
             }
             log(`✓ Sprite "${spriteName}" créé avec succès.`);
         } else {
@@ -314,6 +328,22 @@ const executeAction = async (action, vm, log) => {
                     log(`✓ Costume "${added.name}" ajouté à "${spriteName}".`);
                 } else {
                     log(`⚠ Costume ignoré sur "${spriteName}" : SVG invalide.`);
+                }
+            }
+            // Drop the initial blank/shape costume so the FIRST custom costume
+            // is the one displayed (Scratch refuses to delete the very last
+            // costume, hence the length > 1 guard).
+            if (hasOwnCostumes && target.getCostumes && target.getCostumes().length > 1) {
+                const customNames = new Set(action.costumes.map(c => c && c.name).filter(Boolean));
+                const list = target.getCostumes();
+                const blankIndex = list.findIndex(c => !customNames.has(c.name));
+                if (blankIndex !== -1) {
+                    try {
+                        target.deleteCostume(blankIndex);
+                        target.setCostume(0);
+                    } catch (e) {
+                        log(`⚠ Costume vierge conservé sur "${spriteName}" : ${e.message}`);
+                    }
                 }
             }
         }
@@ -562,14 +592,25 @@ const executeAction = async (action, vm, log) => {
         // Auto-create sprite if it doesn't exist
         if (!target && spriteName.toLowerCase() !== 'stage' && spriteName.toLowerCase() !== 'scène') {
             const emptyItem = emptySprite(spriteName, 'pop', 'costume1');
-            await vm.addSprite(JSON.stringify(emptyItem));
-            target = findTarget(vm, spriteName);
             try {
-                await applyDefaultCostume(vm, target);
+                await vm.addSprite(JSON.stringify(emptyItem));
             } catch (e) {
-                log(`⚠ Costume par défaut non appliqué à "${spriteName}" : ${e.message}`);
+                // vm.addSprite resolves the new target asynchronously: in a
+                // complete storage setup it can reject (e.g. blank costume
+                // asset load failing) even though the target WAS created. Look
+                // it up before giving up.
+                log(`ℹ AddSprite a renvoyé une erreur pour "${spriteName}" : ${e && e.message} ` +
+                    '(vérification de la cible...)');
             }
-            log(`✓ Sprite "${spriteName}" auto-créé.`);
+            target = findTarget(vm, spriteName);
+            if (target) {
+                try {
+                    await applyDefaultCostume(vm, target);
+                } catch (e) {
+                    log(`⚠ Costume par défaut non appliqué à "${spriteName}" : ${e.message}`);
+                }
+                log(`✓ Sprite "${spriteName}" auto-créé.`);
+            }
         }
 
         if (!target) {
@@ -781,7 +822,8 @@ const interpretAndExecute = async (input, vm) => {
         try {
             await executeAction(actions[i], vm, log);
         } catch (err) {
-            log(`❌ Erreur sur l'action ${i + 1} (${actions[i].type || 'inconnue'}) : ${err.message}`);
+            const detail = (err && (err.stack || err.message)) || String(err);
+            log(`❌ Erreur sur l'action ${i + 1} (${actions[i].type || 'inconnue'}) : ${detail}`);
         }
     }
 

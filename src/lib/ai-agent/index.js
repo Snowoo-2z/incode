@@ -5,9 +5,10 @@
 
 import {readTarget, readAllTargets, formatProjectSummary} from './sprite-reader.js';
 import {interpretAndExecute} from './code-interpreter.js';
-import {generateAIPrompt, generateContinuationPrompt, generateFollowUpPrompt, generateAgentPrompt, generateAgentFollowUp} from './prompt-generator.js';
+import {generateAIPrompt, generateContinuationPrompt, generateFollowUpPrompt, generateAgentPrompt, generateAgentFollowUp, generateWebModePrompt} from './prompt-generator.js';
 import {runAgentRequests, stripAgentRequests, formatProjectOverview} from './agent-protocol.js';
-import {PONG_GAME_TEMPLATE, CLICKER_GAME_TEMPLATE} from './templates.js';
+import {transpileWebProject} from './html-to-scratch.js';
+import {PONG_GAME_TEMPLATE, CLICKER_GAME_TEMPLATE, WEB_PONG_TEMPLATE, WEB_CLICKER_TEMPLATE} from './templates.js';
 
 class AIAgentManager {
     constructor () {
@@ -93,6 +94,48 @@ class AIAgentManager {
     }
 
     /**
+     * WEB MODE: transpiles a raw HTML/CSS/JS paste into agent actions, then
+     * executes them exactly like a JSON/DSL answer. The browser lays the page
+     * out in a hidden 480x360 iframe (the stage size): every game object
+     * becomes a sprite with an SVG costume capturing its look, and the JS is
+     * compiled into blocks (whenFlag/forever/if/keyPressed...).
+     * @param {{code?: string, html?: string, css?: string, js?: string}} source
+     * @returns {Promise<object>} execution report (with conversion stats)
+     */
+    async executeWeb (source) {
+        const conversion = transpileWebProject(source);
+        const payload = {actions: conversion.actions};
+        const report = await interpretAndExecute(
+            JSON.stringify(payload), this.getVM());
+        report.stats = conversion.stats;
+        report.conversionWarnings = conversion.warnings;
+        // Surface conversion warnings at the top of the journal.
+        report.logs.unshift(...(conversion.warnings || []));
+        this.lastReport = report;
+        return report;
+    }
+
+    /**
+     * Dry-run of the web transpiler: returns the actions + warnings WITHOUT
+     * touching the project, useful to preview a conversion.
+     * @param {object} source web code
+     * @returns {object} {actions, warnings, stats}
+     */
+    previewWeb (source) {
+        return transpileWebProject(source);
+    }
+
+    /**
+     * Generates the prompt that tells an external AI to answer in the web
+     * dialect (HTML/CSS/JS) instead of ScratchScript/JSON.
+     * @param {string} userGoal what the user wants to build
+     * @returns {string} prompt to copy
+     */
+    generateWebPrompt (userGoal) {
+        return generateWebModePrompt(this.getVM(), userGoal);
+    }
+
+    /**
      * Returns the LIGHT project overview used by the agent mode: one line per
      * sprite, no code. The AI asks for the rest with `/read`.
      * @returns {string} overview
@@ -157,7 +200,9 @@ class AIAgentManager {
     getTemplates () {
         return {
             pong: PONG_GAME_TEMPLATE,
-            clicker: CLICKER_GAME_TEMPLATE
+            clicker: CLICKER_GAME_TEMPLATE,
+            webPong: WEB_PONG_TEMPLATE,
+            webClicker: WEB_CLICKER_TEMPLATE
         };
     }
 }
@@ -184,6 +229,9 @@ export {
     generateAgentFollowUp,
     runAgentRequests,
     stripAgentRequests,
+    transpileWebProject,
     PONG_GAME_TEMPLATE,
-    CLICKER_GAME_TEMPLATE
+    CLICKER_GAME_TEMPLATE,
+    WEB_PONG_TEMPLATE,
+    WEB_CLICKER_TEMPLATE
 };

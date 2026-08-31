@@ -203,7 +203,126 @@ const CLICKER_GAME_TEMPLATE = {
     ]
 };
 
+/**
+ * Web mode demo: the SAME Pong game, but written as a tiny HTML/CSS/JS page.
+ * The HTML/CSS becomes sprites + SVG costumes (the browser lays the page out
+ * in a hidden 480x360 iframe, then each game object is captured); the JS is
+ * transpiled into blocks. Exercised through the "🌐 Mode HTML/JS" tab.
+ */
+const WEB_PONG_TEMPLATE = {
+    name: 'Pong en HTML/CSS/JS (mode web)',
+    description: 'Une mini-page web convertie en sprites, costumes et blocs Scratch.',
+    code: `<!-- La "page" fait 480x360, comme la scène Scratch -->
+<style>
+  body { background: #0f1b2d; overflow: hidden; }
+  .raquette { position: absolute; width: 14px; height: 80px; background: #ffffff; border-radius: 6px; }
+  #balle { position: absolute; width: 22px; height: 22px; background: #FFAB19;
+           border-radius: 50%; left: 229px; top: 169px; }
+  #raquetteG { left: 20px; top: 140px; background: #4C97FF; }
+  #raquetteD { left: 446px; top: 140px; background: #FF6680; }
+  #titre { position: absolute; left: 140px; top: 16px; width: 200px; text-align: center;
+           color: #ffffff; font-size: 20px; font-weight: bold; }
+</style>
+
+<div id="titre">Pong HTML</div>
+<div id="raquetteG" class="raquette"></div>
+<div id="raquetteD" class="raquette"></div>
+<div id="balle"></div>
+
+<script>
+let score1 = 0;
+let score2 = 0;
+showVariable('score1');
+showVariable('score2');
+
+whenFlag(() => {
+  score1 = 0;
+  score2 = 0;
+  raquetteG.gotoXy(-215, 0);
+  raquetteD.gotoXy(215, 0);
+  balle.gotoXy(0, 0);
+  balle.pointInDirection(45);
+
+  forever(() => {
+    // Raquette gauche : W / S
+    if (keyPressed('w')) raquetteG.changeY(8);
+    if (keyPressed('s')) raquetteG.changeY(-8);
+    // Raquette droite : flèches haut / bas
+    if (keyPressed('up arrow')) raquetteD.changeY(8);
+    if (keyPressed('down arrow')) raquetteD.changeY(-8);
+
+    balle.move(7);
+    balle.bounce();
+
+    if (balle.touching(raquetteG)) {
+      balle.pointInDirection(60);
+      balle.move(12);
+    }
+    if (balle.touching(raquetteD)) {
+      balle.pointInDirection(-60);
+      balle.move(12);
+    }
+
+    // Point pour le joueur de droite quand la balle franchit le bord gauche
+    if (balle.x < -230) {
+      score2 += 1;
+      balle.gotoXy(0, 0);
+      balle.pointInDirection(45);
+      wait(0.5);
+    }
+    // Point pour le joueur de gauche quand elle franchit le bord droit
+    if (balle.x > 230) {
+      score1 += 1;
+      balle.gotoXy(0, 0);
+      balle.pointInDirection(-135);
+      wait(0.5);
+    }
+  });
+});
+</script>`
+};
+
+/**
+ * Tiny clicker demo for the web mode: a button with :hover/:active CSS states
+ * that become extra costumes swapped by generated blocks.
+ */
+const WEB_CLICKER_TEMPLATE = {
+    name: 'Bouton cliquable en HTML/CSS/JS',
+    description: 'Un bouton web avec états survol/cliqué, transformé en sprite interactif.',
+    code: `<style>
+  body { background: #1a1030; overflow: hidden; }
+  #bouton {
+    position: absolute; left: 160px; top: 130px; width: 160px; height: 100px;
+    background: #9966FF; border-radius: 18px; color: #ffffff;
+    font-size: 22px; font-weight: bold; text-align: center; line-height: 100px;
+    cursor: pointer;
+  }
+  #bouton:hover { background: #B58CFF; }
+  #bouton:active { background: #7744DD; transform: scale(0.95); }
+</style>
+
+<button id="bouton">Clique-moi !</button>
+
+<script>
+let points = 0;
+showVariable('points');
+
+whenFlag(() => {
+  points = 0;
+  bouton.gotoXy(0, 0);
+  bouton.say('Clique sur moi !');
+});
+
+bouton.onClick(() => {
+  points += 1;
+  bouton.say(join('Points : ', points));
+});
+</script>`
+};
+
 export {
     PONG_GAME_TEMPLATE,
-    CLICKER_GAME_TEMPLATE
+    CLICKER_GAME_TEMPLATE,
+    WEB_PONG_TEMPLATE,
+    WEB_CLICKER_TEMPLATE
 };
