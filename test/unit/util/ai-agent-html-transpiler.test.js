@@ -309,4 +309,88 @@ describe('web mode: transpiler extras', () => {
         const ops = collectOpcodes(result.scripts.get('balle'));
         expect(ops.has('control_if_else')).toBe(true);
     });
+
+    test('JS functions become real Scratch custom blocks', () => {
+        const result = transpile(`
+            function rebonjour(texte, fois) {
+                balle.say(texte);
+                balle.move(fois);
+            }
+            whenFlag(() => {
+                rebonjour('salut', 10);
+            });`, ['balle']);
+        const def = [...result.scripts.values()].flat();
+        const ops = collectOpcodes(def);
+        expect(ops.has('procedures_definition')).toBe(true);
+        expect(ops.has('procedures_prototype')).toBe(true);
+        expect(ops.has('procedures_call')).toBe(true);
+        // The prototype carries the proccode with parameter slots.
+        const find = oc => JSON.stringify(def).includes(oc);
+        expect(find('rebonjour %s %s')).toBe(true);
+        // Call input value present.
+        expect(JSON.stringify(def)).toContain('salut');
+    });
+
+    test('unknown function call gets a TODO stub custom block (never fails)', () => {
+        const result = transpile(`
+            whenFlag(() => {
+                faisUnTour();
+            });`, ['balle']);
+        const ops = collectOpcodes([...result.scripts.values()].flat());
+        expect(ops.has('procedures_definition')).toBe(true);
+        expect(ops.has('procedures_call')).toBe(true);
+        expect(JSON.stringify([...result.scripts.values()].flat())).toContain('TODO');
+        expect(result.warnings.some(w => /faisUnTour/.test(w))).toBe(true);
+    });
+
+    test('custom block params become argument reporters inside the body', () => {
+        const result = transpile(`
+            function bouge(deplacement) {
+                balle.move(deplacement);
+            }
+            whenFlag(() => { bouge(20); });`, ['balle']);
+        const ops = collectOpcodes([...result.scripts.values()].flat());
+        expect(ops.has('argument_reporter_string_number')).toBe(true);
+    });
+
+    test('Math.min/max become conditional arithmetic', () => {
+        const result = transpile(`
+            whenFlag(() => {
+                balle.setX(Math.min(balle.x, 200));
+                score = Math.max(score, 0);
+            });`, ['balle']);
+        const all = collectOpcodes([...result.scripts.values()].flat());
+        expect(all.has('operator_lt')).toBe(true);
+        expect(all.has('operator_gt')).toBe(true);
+        expect(all.has('operator_multiply')).toBe(true);
+    });
+
+    test('requestAnimationFrame becomes a forever loop', () => {
+        const result = transpile(`
+            requestAnimationFrame(() => { balle.move(2); });`, ['balle']);
+        const ops = collectOpcodes(result.scripts.get('balle'));
+        expect(ops.has('control_forever')).toBe(true);
+        expect(ops.has('motion_movesteps')).toBe(true);
+    });
+
+    test('for...of over a list iterates with itemoflist', () => {
+        const result = transpile(`
+            let ennemis = [1, 2, 3];
+            whenFlag(() => {
+                for (let n of ennemis) {
+                    balle.say(n);
+                }
+            });`, ['balle']);
+        const ops = collectOpcodes(result.scripts.get('balle'));
+        expect(ops.has('data_itemoflist')).toBe(true);
+        expect(ops.has('data_lengthoflist')).toBe(true);
+        expect(ops.has('control_repeat')).toBe(true);
+    });
+
+    test('alert() becomes a say block', () => {
+        const result = transpile(`
+            whenFlag(() => { alert('game over'); });`, ['balle']);
+        const ops = collectOpcodes(result.scripts.get('balle'));
+        expect(ops.has('looks_say')).toBe(true);
+    });
 });

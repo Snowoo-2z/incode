@@ -491,9 +491,20 @@ automatiquement converti : le centre de la scène = (0,0) en Scratch.
   vont dans le décor de la scène et ne deviennent pas des sprites.
 
 ## JS = les blocs
-Le JS doit rester SIMPLE et "façon Scratch" : variables globales, if/else, for/while,
-fonctions simples. PAS de classes, de closures avancées, de fetch, de DOM vivant
-(createElement...), de async/await, ni de bibliothèques.
+Le JS doit rester SIMPLE et "façon Scratch" : variables globales, if/else, for/while/
+for...of, switch/case, fonctions simples. PAS de classes, de closures avancées, de fetch,
+de DOM vivant (createElement...), de async/await, ni de bibliothèques.
+
+### Fonctions = "mes blocs"
+Une fonction JS appelée comme une instruction devient un VRAI bloc personnalisé Scratch
+("définir ..." dans Mes blocs) :
+  function tire(cadence) {
+    vaisseau.say("pan !");
+    vaisseau.move(cadence);
+  }
+  if (keyPressed("space")) tire(15);   // crée un bloc "tire 15"
+Les paramètres deviennent des entrées du bloc. Évite les fonctions qui renvoient une
+valeur (Scratch ne sait pas le faire) : utilise une variable globale à la place.
 
 ### Initialisation et boucles
   whenFlag(() => { ... })            // quand ⚑ pressé (tout le démarrage va dedans)
@@ -506,8 +517,10 @@ fonctions simples. PAS de classes, de closures avancées, de fetch, de DOM vivan
   waitUntil(condition)               // attendre jusqu'à
   stopAll()                          // tout arrêter
   switch (etat) { case 1: ...; break; case 2: ...; default: ... }
+  for (let en of ennemis) { ... }    // parcourt une liste (en = élément courant)
   setInterval(() => { ... }, 33)     // = forever + attendre (33 ms -> 0.03 s)
   setTimeout(() => { ... }, 500)     // = attendre 0.5 s puis faire
+  requestAnimationFrame(() => { ... }) // = forever à ~60 fps (boucle de jeu)
   Math.floor(x), Math.ceil(x), Math.round(x), Math.abs(x), Math.sqrt(x),
     Math.sin(a), Math.cos(a), Math.max(a,b), Math.min(a,b), Math.random(),
     Math.PI                           // fonctions mathématiques Scratch

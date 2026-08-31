@@ -93,6 +93,102 @@ class Transpiler {
         this.scripts = new Map();
         /** Variables the JS wants shown on stage monitors. */
         this.shownVars = new Set();
+        /**
+         * Custom-block ("mes blocs") definitions, generated lazily:
+         * name -> {proccode, paramIds: [id...], params: [name...], body: blocks,
+         *          targets: Set<spriteKey>, stub: boolean}
+         * Every JS function the code CALLS as a statement becomes a real
+         * Scratch custom block: known functions get their body converted,
+         * unknown calls get a stub that says `TODO: ...` so nothing fails.
+         */
+        this.customDefs = new Map();
+        /** Params in scope while converting a custom block body:
+         * paramName -> {id, block} argument reporter. */
+        this.procContext = null;
+    }
+
+    /* ------------------------------------------------ custom blocks ("mes blocs")
+     * A `define f(a, b)` + `f(1, 2)` pair maps to Scratch custom blocks:
+     *   - procedures_definition (hat) referencing a procedures_prototype label
+     *     whose proccode is `f %s %s`;
+     *   - procedures_call stack blocks at every call site, each input slot
+     *     filled by the call argument (shadowed by the matching argument
+     *     reporter).
+     * Argument ids are derived from the block name so the prototype, the call
+     * inputs and the body reporters always agree. */
+
+    /** Deterministic argument id for (procName, paramIndex). */
+    procArgId (name, index) {
+        const slug = String(name || 'p').toLowerCase().replace(/[^a-z0-9]/g, '') || 'fn';
+        return `arg-${slug}-${index}`;
+    }
+
+    /** Builds (once) the custom-block definition for a called function. */
+    ensureCustomDef (name, callArgCount = 0, node = null) {
+        if (this.customDefs.has(name)) return this.customDefs.get(name);
+        const fn = this.functions.get(name);
+        const params = fn ? fn.params.slice() : [];
+        // Unknown functions get generic `argument` params, one per call arg.
+        const argCount = Math.max(params.length, fn ? 0 : callArgCount);
+        const paramNames = params.slice();
+        while (paramNames.length < argCount) paramNames.push(`argument ${paramNames.length + 1}`);
+        const paramIds = paramNames.map((_, i) => this.procArgId(name, i));
+        const proccode = `${name} ${paramNames.map(() => '%s').join(' ')}`.trim();
+        const def = {
+            name,
+            proccode,
+            params: paramNames,
+            paramIds,
+            body: null,
+            targets: new Set(),
+            stub: !fn
+        };
+        this.customDefs.set(name, def);
+
+        // Convert the body (if we know it) with params mapped to argument
+        // reporters; unknown functions get a visible TODO stub body.
+        const previousContext = this.procContext;
+        this.procContext = new Map(paramNames.map((p, i) => [p, {
+            id: paramIds[i],
+            block: {opcode: 'argument_reporter_string_number', fields: {VALUE: p}}
+        }]));
+        let body;
+        if (fn) {
+            body = this.stmts(fn.body.body);
+        } else {
+            this.warn(node || fn && fn.node,
+                `fonction "${name}()" inconnue : bloc personnalisé stub créé ` +
+                '(remplace son corps par les vrais blocs).');
+            body = [blk('looks_say', {MESSAGE: `TODO: ${name}()`})];
+        }
+        this.procContext = previousContext;
+        def.body = body;
+        return def;
+    }
+
+    /** procedures_call block for a call site. */
+    customCallBlock (name, argExprs) {
+        const def = this.ensureCustomDef(name, argExprs.length, null);
+        const inputs = {};
+        def.paramIds.forEach((id, i) => {
+            // Value slots on a custom block call: the call argument (a block
+            // spec or a literal). block-builder shadows the slot with a
+            // number/text block; the VM uses the real argument value at
+            // runtime regardless of the shadow's visual default.
+            inputs[id] = argExprs[i] ? this.expr(argExprs[i]) : '';
+        });
+        const block = blk('procedures_call', inputs);
+        block.mutation = {
+            tagName: 'mutation',
+            proccode: def.proccode,
+            argumentids: JSON.stringify(def.paramIds),
+            argumentnames: JSON.stringify(def.params),
+            argumentdefaults: JSON.stringify(def.params.map(() => '')),
+            warp: 'false',
+            children: []
+        };
+        block.__customName = name;
+        return block;
     }
 
     warn (node, message) {
@@ -151,6 +247,10 @@ class Transpiler {
             if (node.name === 'true') return true;
             if (node.name === 'false') return false;
             if (this.isSprite(node.name)) return node.name;
+            // Custom-block parameter: reference the block's argument reporter.
+            if (this.procContext && this.procContext.has(node.name)) {
+                return this.procContext.get(node.name).block;
+            }
             if (this.functions.has(node.name)) {
                 this.warn(node, `"${node.name}" utilisée comme valeur : les fonctions ne peuvent ` +
                     'pas renvoyer de valeur en blocs (utilise une variable globale).');
@@ -320,12 +420,23 @@ class Transpiler {
     /* ============================================================== CALLS */
 
     /**
-     * Call expression. As a statement this may return a CONTROL/HAT marker;
-     * as a reporter it returns a block spec.
+     * Call expression. As a statement this may return a CONTROL/HAT/CUSTOM
+     * marker; as a reporter it returns a block spec.
      */
-    callExpr (node) {
+    callExpr (node, asStatement = false) {
         if (node.callee.type === 'Identifier') {
-            return this.globalCall(node);
+            const result = this.globalCall(node);
+            // A custom-block marker is only valid as a STATEMENT (procedures
+            // cannot return values in Scratch). As a reporter, inline the
+            // declared function body or return 0.
+            if (result && result.__custom) {
+                if (asStatement) return result;
+                const name = result.__custom;
+                if (this.functions.has(name)) return {__inline: name, args: node.arguments};
+                this.warn(node, `fonction "${name}()" sans équivalent en bloc : ignorée ici.`);
+                return 0;
+            }
+            return result;
         }
         if (node.callee.type === 'MemberExpression') {
             return this.methodCall(node);
@@ -412,6 +523,21 @@ class Transpiler {
             return blk('operator_round', {NUM: val(0)});
         case 'join':
             return blk('operator_join', {STRING1: val(0), STRING2: val(1)});
+        case 'parseInt':
+            // parseInt truncates toward zero; floor handles the usual positive case.
+            return blk('operator_mathop', {NUM: val(0)}, {OPERATOR: 'floor'});
+        case 'parseFloat':
+        case 'Number':
+            // Scratch number slots coerce automatically; pass the value through.
+            return val(0);
+        case 'String':
+            // Force a string: join with an empty text.
+            return blk('operator_join', {STRING1: '', STRING2: val(0)});
+        case 'alert':
+            // Dialog message -> sprite "say" (routed to the current context).
+            return blk('looks_say', {MESSAGE: val(0)});
+        case 'length':
+            return blk('operator_length', {STRING: val(0)});
         case 'abs': case 'floor': case 'ceiling': case 'sqrt': case 'sin': case 'cos':
         case 'tan': case 'asin': case 'acos': case 'atan': case 'ln': case 'log':
         case 'e ^': case '10 ^':
@@ -434,6 +560,14 @@ class Transpiler {
         case 'clearInterval':
         case 'clearTimeout':
             return null;
+        case 'requestAnimationFrame': {
+            // rAF loop: the callback re-schedules itself in browsers, but in
+            // Scratch a forever loop is the natural equivalent: run the body
+            // at ~60fps.
+            const cbBody = body(0) || [];
+            return {__control: 'forever',
+                body: [...cbBody, blk('control_wait', {DURATION: 0.016})]};
+        }
 
         // ---- variables ----
         case 'showVariable': {
@@ -463,12 +597,14 @@ class Transpiler {
             return null;
 
         default:
-            // User-declared function call -> inline substitution
+            // User-declared or unknown function call. In STATEMENT context
+            // (exprStatement handles __custom) it becomes a real Scratch
+            // custom block ("mes blocs"); used as a reporter it falls back to
+            // inline substitution (or 0 + warning for unknown functions).
             if (this.functions.has(name)) {
-                return {__inline: name, args};
+                return {__custom: name, args, node};
             }
-            this.warn(node, `fonction "${name}()" non reconnue (ignorée).`);
-            return 0;
+            return {__custom: name, args, node, stub: true};
         }
     }
 
@@ -502,14 +638,28 @@ class Transpiler {
                 return blk('operator_round', {NUM: val(0)});
             }
             if (method === 'min' || method === 'max') {
-                this.warn(node, `Math.${method}() : pas de bloc correspondant ` +
-                    '(utilise if/else sur la comparaison).');
-                return 0;
+                // No built-in min/max block: Scratch comparisons are boolean
+                // (true=1/false=0), so min(a,b) = (a<b)*a + (a>=b)*b and
+                // max(a,b) = (a>b)*a + (a<=b)*b.
+                const cmp = method === 'min' ? 'operator_lt' : 'operator_gt';
+                const a = val(0);
+                const b = args.length > 1 ? val(1) : 0;
+                const pickA = blk(cmp, {OPERAND1: a, OPERAND2: b});
+                const pickB = {opcode: 'operator_not', inputs: {OPERAND: pickA}};
+                return blk('operator_add', {
+                    NUM1: blk('operator_multiply', {NUM1: pickA, NUM2: a}),
+                    NUM2: blk('operator_multiply', {NUM1: pickB, NUM2: b})
+                });
             }
             if (method === 'pow' || method === 'power') {
-                // No generic pow block: e^x is available, nothing else.
-                this.warn(node, 'Math.pow() non supporté (seuls e^, sin, sqrt... existent en bloc).');
-                return 0;
+                // No generic power block: warn (integer exponents could be
+                // expanded to repeated multiplies); e^x is available instead.
+                this.warn(node, 'Math.pow(base, exp) non supporté ' +
+                    '(utilise e^ pour base e, ou des multiplications).');
+                return val(0);
+            }
+            if (method === 'exp') {
+                return blk('operator_mathop', {NUM: val(0)}, {OPERATOR: 'e ^'});
             }
             this.warn(node, `Math.${method}() non reconnu.`);
             return 0;
@@ -914,6 +1064,50 @@ class Transpiler {
             return blk('control_forever', {SUBSTACK: body});
         }
 
+        case 'ForOfStatement':
+        case 'ForInStatement': {
+            // for (let item of list) { ... } ->
+            //   set [indexVar] to 1
+            //   repeat (length of list) {
+            //     set item to (item (indexVar) of list)   [for...of]
+            //     <body>
+            //     change [indexVar] by 1
+            //   }
+            // for...in gives keys (indices) instead of values.
+            const listName = node.right.type === 'Identifier' ? node.right.name : null;
+            if (!listName || !this.listDecls.has(listName)) {
+                this.warn(node, 'boucle for...of/for...in : seul le parcours d\'une ' +
+                    'liste déclarée est supporté.');
+                return null;
+            }
+            const decl = node.left.type === 'VariableDeclaration' ?
+                node.left.declarations[0] : null;
+            const itemVar = decl ? decl.id.name :
+                (node.left.type === 'Identifier' ? node.left.name : 'item');
+            this.varDecls.set(itemVar, 0);
+            const indexVar = `_i_${listName}`;
+            this.varDecls.set(indexVar, 1);
+            const lenReporter = blk('data_lengthoflist', null, LIST_FIELD(listName));
+            const indexRef = blk('data_variable', null, VAR_FIELD(indexVar));
+            const body = this.stmts(node.body.type === 'BlockStatement' ?
+                node.body.body : [node.body]);
+            const itemBlock = node.type === 'ForOfStatement' ?
+                blk('data_setvariableto', {
+                    VALUE: blk('data_itemoflist', {INDEX: indexRef}, LIST_FIELD(listName))
+                }, VAR_FIELD(itemVar)) :
+                // for...in: item = index
+                blk('data_setvariableto', {VALUE: indexRef}, VAR_FIELD(itemVar));
+            const loopBody = [
+                itemBlock,
+                ...body,
+                blk('data_changevariableby', {VALUE: 1}, VAR_FIELD(indexVar))
+            ];
+            return [
+                {__var: indexVar, value: 1},
+                blk('control_repeat', {TIMES: lenReporter, SUBSTACK: loopBody})
+            ];
+        }
+
         case 'BlockStatement':
             return this.stmts(node.body);
 
@@ -984,13 +1178,18 @@ class Transpiler {
         if (node.type === 'AssignmentExpression') return this.assignment(node);
         if (node.type === 'UpdateExpression') return this.update(node);
         if (node.type === 'CallExpression') {
-            const result = this.callExpr(node);
+            const result = this.callExpr(node, true);
             if (result === null || result === undefined) return null;
             if (result.__hat) return result;
             if (result.__multiHat) return result.__multiHat;
             if (result.__control) return this.controlBlock(result);
             if (result.__sequence) return result.__sequence;
             if (result.__inline) return this.inlineFunction(result.__inline, result.args);
+            if (result.__custom) {
+                // Ensure the definition exists (also warns for unknown funcs).
+                this.ensureCustomDef(result.__custom, result.args.length, result.node);
+                return this.customCallBlock(result.__custom, result.args);
+            }
             if (result.opcode) return result;
             return null;
         }
@@ -1224,6 +1423,53 @@ class Transpiler {
     }
 
     /**
+     * True for blocks that only run on a sprite (the stage rejects them):
+     * motion, looks text/costume/visibility blocks...
+     */
+    isSpriteOnlyBlock (block) {
+        if (!block || typeof block !== 'object') return false;
+        const op = block.opcode || '';
+        return op.startsWith('motion_') ||
+            ['looks_say', 'looks_sayforsecs', 'looks_think', 'looks_thinkforsecs',
+                'looks_show', 'looks_hide', 'looks_switchcostumeto', 'looks_nextcostume',
+                'looks_changesizeby', 'looks_setsizeto', 'looks_changeeffectby',
+                'looks_seteffectto', 'looks_cleargraphiceffects', 'looks_gotofrontback',
+                'looks_goforwardbackwardlayers', 'control_create_clone_of',
+                'control_delete_this_clone', 'sensing_touchingobject',
+                'sensing_distanceto', 'procedures_call'].includes(op);
+    }
+
+    /**
+     * Neutral blocks that ONLY run on a sprite (say/think, motion...) cannot
+     * stay on the stage. When the project has exactly one sprite, retarget them
+     * to it (this is the common shape of single-sprite games written entirely
+     * in JS: `whenFlag(() => { say('hi'); move(10); })`).
+     * Walks nested SUBSTACK blocks (forever/if/repeat bodies).
+     */
+    retargetSpriteOnly (items) {
+        const spriteTargets = [...this.spriteNames].filter(k => k !== '__stage__');
+        const only = spriteTargets.length === 1 ? spriteTargets[0] : null;
+        if (!only) return;
+        const walk = value => {
+            if (!value || typeof value !== 'object') return;
+            if (Array.isArray(value)) {
+                value.forEach(walk);
+                return;
+            }
+            if (value.opcode && !value.__sprite && this.isSpriteOnlyBlock(value)) {
+                value.__sprite = only;
+            }
+            if (value.inputs) {
+                for (const v of Object.values(value.inputs)) {
+                    if (Array.isArray(v)) v.forEach(walk);
+                    else walk(v);
+                }
+            }
+        };
+        walk(items || []);
+    }
+
+    /**
      * Replicates a stack of blocks once per referenced sprite, so that each
      * sprite ends up with the loops/calls that concern it.
      * @param {Array<object>} items block specs (already free of markers)
@@ -1362,8 +1608,16 @@ class Transpiler {
             // the same sequence (so `wait(1); balle.say('x')` stays together),
             // or the fallback (stage at top level, hat owner inside a hat).
             const index = items.indexOf(item);
-            const owner = item.__sprite || this.blockDirectSprite(item) ||
+            let owner = item.__sprite || this.blockDirectSprite(item) ||
                 findNearestSprite(index) || fallback;
+            // Sprite-only blocks (motion, looks say/think/show/hide...) are
+            // invalid on the stage. When they land there and the project has
+            // exactly one sprite, send them to it (common for single-sprite
+            // games written entirely in JS).
+            if (owner === '__stage__' && this.isSpriteOnlyBlock(item)) {
+                const spriteTargets = [...spriteKeys].filter(k => k !== '__stage__');
+                if (spriteTargets.length === 1) owner = spriteTargets[0];
+            }
             add(owner, item);
         }
 
@@ -1475,6 +1729,7 @@ class Transpiler {
                 this.pushScript(hatOwner, this.cleanStack([head, ...(hat.body || [])]));
                 continue;
             }
+            this.retargetSpriteOnly(hat.body || []);
             const routed = this.splitStack(hat.body || [], spriteKeys, '__stage__');
             for (const [key, body] of routed.entries()) {
                 if (!body.length) continue;
@@ -1484,6 +1739,7 @@ class Transpiler {
 
         // ---- Loose top-level blocks (setup + game loops written without an
         // explicit whenFlag wrapper): wrap each routed stack in a flag hat.
+        this.retargetSpriteOnly(loose);
         const looseRouted = this.splitStack(loose, spriteKeys);
         for (const [key, body] of looseRouted.entries()) {
             if (!body.length) continue;
@@ -1494,7 +1750,117 @@ class Transpiler {
             this.scripts.set(key, [this.cleanStack([head, ...body]), ...existing]);
         }
 
+        // ---- Custom blocks ("mes blocs"): a procedures_definition hat must
+        // live on EVERY target that calls it (Scratch resolves calls on the
+        // target they run on). Collect call sites from the routed scripts, then
+        // prepend each target's own definitions.
+        this.emitCustomDefinitions();
+
         return this.result();
+    }
+
+    /** Finds every custom block called in a stack of blocks (walks inputs). */
+    static collectCustomCalls (stack) {
+        const names = new Set();
+        const walk = value => {
+            if (!value || typeof value !== 'object') return;
+            if (Array.isArray(value)) {
+                value.forEach(walk);
+                return;
+            }
+            if (value.__customName) names.add(value.__customName);
+            if (value.inputs) {
+                for (const v of Object.values(value.inputs)) {
+                    if (Array.isArray(v)) v.forEach(walk);
+                    else walk(v);
+                }
+            }
+        };
+        walk(stack || []);
+        return names;
+    }
+
+    /**
+     * Builds the procedures_definition hat stack for a custom block.
+     * @param {object} def definition record from customDefs
+     * @returns {Array<object>} hat stack [definition, ...body]
+     */
+    buildDefinitionStack (def) {
+        // Prototype label: orange `define f %s %s` with shadow argument
+        // reporters nested in its inputs.
+        const protoInputs = {};
+        def.paramIds.forEach((id, i) => {
+            protoInputs[id] = {
+                opcode: 'argument_reporter_string_number',
+                shadow: true,
+                fields: {VALUE: def.params[i]}
+            };
+        });
+        const prototype = blk('procedures_prototype', protoInputs);
+        prototype.mutation = {
+            tagName: 'mutation',
+            proccode: def.proccode,
+            argumentids: JSON.stringify(def.paramIds),
+            argumentnames: JSON.stringify(def.params),
+            argumentdefaults: JSON.stringify(def.params.map(() => '')),
+            warp: 'false',
+            children: []
+        };
+        const definition = blk('procedures_definition', {CUSTOM_BLOCK: prototype});
+        return [definition, ...(def.body || [])];
+    }
+
+    /** Force-tags every stack block (and nested reporters) to a sprite. */
+    tagStackSprite (stack, sprite) {
+        const tag = value => {
+            if (!value || typeof value !== 'object') return;
+            if (Array.isArray(value)) {
+                value.forEach(tag);
+                return;
+            }
+            if (value.opcode && value.__sprite !== '__keep__') value.__sprite = sprite;
+            if (value.inputs) {
+                for (const v of Object.values(value.inputs)) {
+                    if (Array.isArray(v)) v.forEach(tag);
+                    else tag(v);
+                }
+            }
+        };
+        tag(stack || []);
+    }
+
+    /** Emits each custom block definition on the targets that call it. */
+    emitCustomDefinitions () {
+        // Determine which targets call which custom blocks.
+        const targetsForDef = new Map(); // name -> Set<key>
+        for (const [key, stacks] of this.scripts.entries()) {
+            for (const stack of stacks) {
+                for (const name of Transpiler.collectCustomCalls(stack)) {
+                    if (!targetsForDef.has(name)) targetsForDef.set(name, new Set());
+                    targetsForDef.get(name).add(key);
+                }
+            }
+        }
+        for (const [name, def] of this.customDefs.entries()) {
+            const keys = targetsForDef.get(name) || new Set(['__stage__']);
+            for (const key of keys) {
+                const stack = this.buildDefinitionStack(def);
+                // The definition RUNS on this target: untag sprite-less blocks
+                // inside the body (say, move...) so they inherit the target,
+                // but keep explicit sprite tags that point elsewhere intact.
+                for (const block of stack) {
+                    if (block && block.opcode &&
+                        (!block.__sprite || block.__sprite === '__stage__') &&
+                        key !== '__stage__') {
+                        block.__sprite = key;
+                    }
+                }
+                const cleaned = this.cleanStack(stack);
+                const existing = this.scripts.get(key) || [];
+                // Definitions go BEFORE the scripts that call them.
+                this.scripts.set(key, [cleaned, ...existing]);
+            }
+        }
     }
 
     pushScript (key, stack) {

@@ -509,6 +509,19 @@ const buildSingleBlock = (spec, blockId, parentId, blocksList, context) => {
 
     buildFields(block, givenFields, context);
 
+    // Custom blocks ("mes blocs"): a `procedures_definition` holds the prototype
+    // hat (the orange `define` label) nested in its CUSTOM_BLOCK input. It is
+    // not a stack SUBSTACK, so we nest it explicitly here before generic input
+    // handling (whose schema fallback would otherwise shadow it with a text
+    // block).
+    if (opcode === 'procedures_definition' &&
+        isBlockSpec(givenInputs.CUSTOM_BLOCK)) {
+        const protoId = generateId('block_');
+        buildSingleBlock(givenInputs.CUSTOM_BLOCK, protoId, blockId, blocksList, context);
+        block.inputs.custom_block = {name: 'custom_block', block: protoId, shadow: null};
+        delete givenInputs.CUSTOM_BLOCK;
+    }
+
     // Every declared input of the opcode gets built, even if the AI omitted it,
     // so the block always looks exactly like the one from the palette.
     const inputNames = new Set([...Object.keys(declared), ...Object.keys(givenInputs)]);
