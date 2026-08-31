@@ -200,7 +200,19 @@ const BLOCK_SCHEMA = {
         inputs: {COLOR_PARAM: menu('pen_menu_colorParam', 'colorParam', 'color'), VALUE: NUM}
     },
     pen_changePenSizeBy: {inputs: {SIZE: NUM}},
-    pen_setPenSizeTo: {inputs: {SIZE: NUM}}
+    pen_setPenSizeTo: {inputs: {SIZE: NUM}},
+
+    /* ------------------------------------------------- Custom blocks ("mes blocs")
+     * procedures_definition holds its orange `define` label (procedures_prototype)
+     * nested in the CUSTOM_BLOCK input; block-builder special-cases that nesting.
+     * Argument ids/inputs are dynamic (one per %s in the proccode), so the
+     * procedures_* opcodes declare no static inputs — the values provided are
+     * built as-is. */
+    procedures_definition: {},
+    procedures_prototype: {},
+    procedures_call: {},
+    argument_reporter_string_number: {fields: {VALUE: ''}},
+    argument_reporter_boolean: {fields: {VALUE: ''}}
 };
 
 /**

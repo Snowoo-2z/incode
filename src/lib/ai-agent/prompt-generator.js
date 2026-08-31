@@ -457,12 +457,143 @@ Tu peux expliquer ce que tu fais avant. Pour une modification, termine UNIQUEMEN
 const generateFollowUpPrompt = (vm, executionReport, userNote = '') =>
     generateContinuationPrompt(vm, userNote, executionReport);
 
+/**
+ * WEB MODE prompt: instead of answering in ScratchScript/JSON, the AI writes a
+ * tiny vanilla HTML/CSS/JS page. The HTML/CSS is rendered by the browser in a
+ * hidden 480x360 iframe and captured into sprite costumes; the JS is
+ * transpiled into blocks. This documentation defines the Scratch-shaped JS
+ * dialect the transpiler understands.
+ * @param {object} vm Scratch VM (project state for context)
+ * @param {string} userGoal what the user wants to build
+ * @returns {string} prompt
+ */
+const WEB_MODE_RULES = `
+Tu réponds UNIQUEMENT avec un seul fichier HTML autonome (HTML + CSS dans <style> + JS dans <script>),
+sans explication, en vanilla JS (aucune bibliothèque, aucun import, aucun module).
+
+## La scène
+La page fait 480x360 (taille de la scène Scratch). Le repère CSS (en haut à gauche) est
+automatiquement converti : le centre de la scène = (0,0) en Scratch.
+
+## HTML = les sprites
+- Chaque élément avec un id devient un SPRITE Scratch (son id est le nom du sprite).
+  <button id="jouer"> devient aussi un sprite, cliquable.
+- Positionne les éléments en CSS : position:absolute; left/top/width/height ; ou en JS avec
+  les méthodes du sprite. La mise en page (couleurs, border-radius, dégradés, texte, emojis,
+  :hover, :active) est capturée fidèlement dans le costume : tu peux utiliser TOUT le CSS
+  visuel que tu veux.
+- Un <button> avec des états :hover/:active reçoit automatiquement plusieurs costumes et
+  les blocs qui les permutent.
+- Une animation CSS (@keyframes / animation / transition) appliquée à un élément avec id est
+  capturée image par image : l'élément reçoit plusieurs costumes et une boucle qui les fait
+  défiler au même rythme. Tu peux donc animer un héros qui marche, une porte qui s'ouvre, un
+  ennemi qui clignote... directement en CSS. Les décorations sans id (titres, panneaux de fond)
+  vont dans le décor de la scène et ne deviennent pas des sprites.
+
+## JS = les blocs
+Le JS doit rester SIMPLE et "façon Scratch" : variables globales, if/else, for/while/
+for...of, switch/case, fonctions simples. PAS de classes, de closures avancées, de fetch,
+de DOM vivant (createElement...), de async/await, ni de bibliothèques.
+
+### Fonctions = "mes blocs"
+Une fonction JS appelée comme une instruction devient un VRAI bloc personnalisé Scratch
+("définir ..." dans Mes blocs) :
+  function tire(cadence) {
+    vaisseau.say("pan !");
+    vaisseau.move(cadence);
+  }
+  if (keyPressed("space")) tire(15);   // crée un bloc "tire 15"
+Les paramètres deviennent des entrées du bloc. Évite les fonctions qui renvoient une
+valeur (Scratch ne sait pas le faire) : utilise une variable globale à la place.
+
+### Initialisation et boucles
+  whenFlag(() => { ... })            // quand ⚑ pressé (tout le démarrage va dedans)
+  forever(() => { ... })             // répéter indéfiniment
+  repeat(10, () => { ... })          // répéter 10 fois
+  if (condition) { ... } else { ... }
+  while (!condition) { ... }         // répéter jusqu'à ce que condition
+  for (let i = 0; i < 10; i++) {}    // répéter 10 fois
+  wait(1)                            // attendre 1 seconde (dans une boucle)
+  waitUntil(condition)               // attendre jusqu'à
+  stopAll()                          // tout arrêter
+  switch (etat) { case 1: ...; break; case 2: ...; default: ... }
+  for (let en of ennemis) { ... }    // parcourt une liste (en = élément courant)
+  setInterval(() => { ... }, 33)     // = forever + attendre (33 ms -> 0.03 s)
+  setTimeout(() => { ... }, 500)     // = attendre 0.5 s puis faire
+  requestAnimationFrame(() => { ... }) // = forever à ~60 fps (boucle de jeu)
+  Math.floor(x), Math.ceil(x), Math.round(x), Math.abs(x), Math.sqrt(x),
+    Math.sin(a), Math.cos(a), Math.max(a,b), Math.min(a,b), Math.random(),
+    Math.PI                           // fonctions mathématiques Scratch
+
+### Événements
+  sprite.onClick(() => { ... })      // quand ce sprite est cliqué
+  whenKeyPressed('up arrow', () => {})   // ou document.addEventListener('keydown', e => { if (e.key === 'ArrowUp') ... })
+  whenReceive('message', () => {})   // quand je reçois
+  broadcast('message')               // envoyer à tous
+  Noms de touches : 'up arrow','down arrow','left arrow','right arrow','space','enter',
+  ou une lettre 'w' (minuscule).
+
+### Variables et listes
+  let score = 0            -> variable Scratch (affichée avec showVariable('score'))
+  let ennemis = [1, 2, 3]  -> liste Scratch
+  score += 1 ; score *= 2 ; score -= 5 ; score = score + 1
+  ennemis.push(5)          (ajouter)
+  ennemis.pop()            (supprimer le dernier)  ; ennemis.shift() (le premier)
+  ennemis.insert(0, x)     ; ennemis.clear()
+  if (ennemis.includes(5)) { ... }
+  let x = ennemis[2] ; let n = ennemis.length
+
+### API des sprites (le nom = l'id HTML)
+Mouvement : balle.move(7), balle.bounce(), balle.gotoXy(x,y), balle.changeX(3),
+  balle.changeY(3), balle.setX(100), balle.setY(50), balle.turnRight(15), balle.turnLeft(15),
+  balle.pointInDirection(45), balle.pointTowards(autreSprite), balle.glide(1, x, y),
+  balle.setRotationStyle("don't rotate")
+Lire : balle.x, balle.y, balle.direction, balle.size  (dans des expressions)
+Aspect : balle.say("texte"), balle.sayFor("texte", 2), balle.think("..."), balle.show(),
+  balle.hide(), balle.setSize(120), balle.nextCostume(), balle.switchCostume('nom'),
+  balle.goToFront(), balle.goBackLayers(2)
+Sons : balle.playSound('pop'), balle.stopAllSounds()
+Clones : balle.clone() [ou clone(autreSprite)], quand un clone démarre : balle.whenCloned(() => {}),
+  puis deleteThisClone() -> utiliser balle.deleteClone()
+Capteurs : balle.touching('_edge_')  (ou '_mouse_', ou un autre sprite), balle.distanceTo(sprite),
+  keyPressed('w'), mouseDown(), mouseX(), mouseY(), answer() après ask('Question ?')
+
+Tu peux écrire le JS en style DOM classique aussi :
+  const balle = document.getElementById('balle'); balle.move(5);
+  balle.style.left = '100px' / .top = 50 / .display = 'none' / .opacity = 0.5
+    (left/top sont convertis depuis le coin haut-gauche vers les coordonnées Scratch) ;
+  alert('game over') -> fait "dire" ; for (let en of ennemis) {...} parcourt une liste ;
+  nom.charAt(0) -> lettre n°1 de nom ; Math.min/max/random/floor et requestAnimationFrame OK.
+Opérateurs : random(1, 10), round(x), abs(x), floor(x), sqrt(x), sin(x), join('a', b),
+  les opérateurs + - * / % < > === && || ! , les littéraux 'texte' et nombres.
+Fonctions : définis function tirer(vitesse) { ... } : elle est recopiée (inline) à chaque appel
+  avec ses paramètres transformés en variables. (Pas de récursion.)
+
+## Style de code attendu
+- Mets TOUT le démarrage dans whenFlag(...), et la logique du jeu dans un forever(...).
+- Un seul whenFlag par fichier ; réagis aux clics/touches avec onClick / whenKeyPressed.
+- N'utilise les méthodes de sprite QUE sur des id définis dans le HTML.
+- Pas de return de valeur : fais transiter les résultats par des variables globales.
+`;
+
+const generateWebModePrompt = (vm, userGoal) => {
+    const goal = String(userGoal || 'Crée un petit jeu').trim();
+    return `OBJECTIF : ${goal}
+
+${WEB_MODE_RULES}
+
+Réponds maintenant avec le fichier HTML complet (commence directement par <!-- ou <!DOCTYPE html>),
+prêt à être collé dans l'onglet « 🌐 Mode HTML/JS » du Terminal IA, qui le transformera en blocs Scratch.`;
+};
+
 export {
     generateAIPrompt,
     generateContinuationPrompt,
     generateFollowUpPrompt,
     generateAgentPrompt,
     generateAgentFollowUp,
+    generateWebModePrompt,
+    WEB_MODE_RULES,
     OPCODES_CHEATSHEET,
     COSTUME_DOC
 };

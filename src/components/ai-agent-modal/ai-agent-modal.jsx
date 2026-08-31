@@ -3,7 +3,11 @@ import PropTypes from 'prop-types';
 import classNames from 'classnames';
 
 import ModalComponent from '../modal/modal.jsx';
-import AIAgent, {PONG_GAME_TEMPLATE} from '../../lib/ai-agent/index.js';
+import AIAgent, {
+    PONG_GAME_TEMPLATE,
+    WEB_PONG_TEMPLATE,
+    WEB_CLICKER_TEMPLATE
+} from '../../lib/ai-agent/index.js';
 import ProjectDocumentation from '../../lib/project-documentation.js';
 import styles from './ai-agent-modal.css';
 
@@ -39,7 +43,21 @@ class AIAgentModalComponent extends React.Component {
             agentCopied: false,
             agentPromptCopied: false,
             agentBusy: false,
-            targets: []
+            targets: [],
+            // --- Mode web : HTML/CSS/JS -> blocs Scratch (rendu + capture).
+            webCode: '',
+            webGoal: "Crée un petit jeu en HTML/CSS/JS (l'IA code une page web, elle devient des blocs).",
+            webLogs: [
+                '🌐 Mode HTML/JS — l\'IA code une mini-page web, elle devient des BLOCS Scratch.',
+                '1. Colle du HTML/CSS/JS vanilla (ou charge un exemple).',
+                '2. Clique sur « Convertir en blocs » : la page est rendue dans une iframe 480×360,',
+                '   chaque élément avec un id devient un sprite (son look est capturé en costume),',
+                '   et le JS (whenFlag/forever/if/keyPressed...) est traduit en blocs.',
+                'Les <button> avec :hover/:active reçoivent plusieurs costumes permutés par des blocs.'
+            ],
+            webPromptCopied: false,
+            webBusy: false,
+            webStats: null
         };
 
         this.handleCopyPrompt = this.handleCopyPrompt.bind(this);
@@ -52,6 +70,10 @@ class AIAgentModalComponent extends React.Component {
         this.handleCopyAgentFollowUp = this.handleCopyAgentFollowUp.bind(this);
         this.refreshTargets = this.refreshTargets.bind(this);
         this.refreshOverview = this.refreshOverview.bind(this);
+        this.handleConvertWeb = this.handleConvertWeb.bind(this);
+        this.handleLoadWebPong = this.handleLoadWebPong.bind(this);
+        this.handleLoadWebClicker = this.handleLoadWebClicker.bind(this);
+        this.handleCopyWebPrompt = this.handleCopyWebPrompt.bind(this);
     }
 
     componentDidMount () {
@@ -213,6 +235,59 @@ class AIAgentModalComponent extends React.Component {
             this.state.agentFollowUp,
             'agentCopied',
             'Réponse à renvoyer à l\'IA'
+        );
+    }
+
+    /** Web mode: transpiles the HTML/CSS/JS paste and applies the actions. */
+    async handleConvertWeb (overrideCode) {
+        const code = typeof overrideCode === 'string' ? overrideCode : this.state.webCode;
+        if (!code || !code.trim()) {
+            this.setState({
+                webLogs: [...this.state.webLogs, '⚠ Collez d\'abord du code HTML/CSS/JS.']
+            });
+            return;
+        }
+        this.setState({webBusy: true});
+        try {
+            const report = await AIAgent.executeWeb({code});
+            const stats = report.stats;
+            const summary = stats ? [
+                '🌐 Conversion terminée :',
+                `   ${stats.sprites} sprite(s) / ${stats.costumes} costume(s) capturé(s),`,
+                `   ${stats.scripts} script(s) en blocs, ${stats.variables} variable(s), ${stats.lists} liste(s).`
+            ].join('\n') : '';
+            this.setState({
+                webLogs: [...this.state.webLogs, '--- Nouvelle conversion ---',
+                    summary, ...report.logs].filter(Boolean),
+                webStats: stats
+            });
+        } catch (e) {
+            this.setState({
+                webLogs: [...this.state.webLogs, `❌ Erreur de conversion : ${e.message}`]
+            });
+        }
+        this.setState({webBusy: false});
+        this.refreshTargets();
+    }
+
+    /** Loads the web-mode Pong example and converts it immediately. */
+    async handleLoadWebPong () {
+        this.setState({webCode: WEB_PONG_TEMPLATE.code});
+        await this.handleConvertWeb(WEB_PONG_TEMPLATE.code);
+    }
+
+    /** Loads the web-mode clicker example and converts it immediately. */
+    async handleLoadWebClicker () {
+        this.setState({webCode: WEB_CLICKER_TEMPLATE.code});
+        await this.handleConvertWeb(WEB_CLICKER_TEMPLATE.code);
+    }
+
+    /** Copies the prompt that makes an external AI answer in the web dialect. */
+    async handleCopyWebPrompt () {
+        await this.copyPrompt(
+            AIAgent.generateWebPrompt(this.state.webGoal),
+            'webPromptCopied',
+            'Prompt mode web généré'
         );
     }
 
@@ -476,6 +551,121 @@ class AIAgentModalComponent extends React.Component {
         );
     }
 
+    renderWebTab () {
+        return (
+            <React.Fragment>
+                {/* Step 1: goal -> prompt for an external AI */}
+                <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                        <div className={styles.sectionTitle}>
+                            <span className={styles.stepNumber}>{'1'}</span>
+                            <span>{'Demander à l\'IA de coder en HTML/CSS/JS'}</span>
+                        </div>
+                    </div>
+                    <p className={styles.sectionDesc}>
+                        {'Copiez ce prompt dans ChatGPT ou Claude : il demande à l\'IA d\'écrire une ' +
+                            'mini-page web (480×360) dans un dialecte JS simple. Chaque élément avec un ' +
+                            'id devient un sprite, son look (couleurs, dégradés, :hover, texte, emojis) ' +
+                            'est capturé en costume, et le JS est traduit en blocs.'}
+                    </p>
+                    <textarea
+                        className={styles.textarea}
+                        rows={2}
+                        value={this.state.webGoal}
+                        onChange={e => this.setState({webGoal: e.target.value})}
+                        placeholder="Ex: Un petit jeu de clicker avec un bouton qui grossit..."
+                    />
+                    <div className={styles.buttonRow}>
+                        <button
+                            className={classNames(
+                                styles.actionBtn,
+                                this.state.webPromptCopied ? styles.successBtn : styles.primaryBtn
+                            )}
+                            onClick={this.handleCopyWebPrompt}
+                        >
+                            {this.state.webPromptCopied ?
+                                '✓ Prompt web copié !' :
+                                '📋 Copier le prompt (mode HTML/JS)'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Step 2: paste / load web code */}
+                <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                        <div className={styles.sectionTitle}>
+                            <span className={styles.stepNumber}>{'2'}</span>
+                            <span>{'Code HTML/CSS/JS à transformer en blocs'}</span>
+                        </div>
+                    </div>
+                    <p className={styles.sectionDesc}>
+                        {'Collez une page HTML autonome (avec <style> et <script>), puis convertissez. ' +
+                            'Le rendu est fidèle à la page : la mise en page est faite par le navigateur, ' +
+                            'chaque objet devient un sprite à sa place, avec son costume.'}
+                    </p>
+                    <textarea
+                        className={classNames(styles.textarea, styles.textareaCode)}
+                        rows={12}
+                        value={this.state.webCode}
+                        onChange={e => this.setState({webCode: e.target.value})}
+                        placeholder={
+                            '<style>\n  body { background: #0f1b2d; }\n' +
+                            '  #balle { position:absolute; left:229px; top:169px; width:22px; height:22px;\n' +
+                            '            background:#FFAB19; border-radius:50%; }\n</style>\n' +
+                            '<div id="balle"></div>\n<script>\n' +
+                            'whenFlag(() => {\n  balle.gotoXy(0, 0);\n' +
+                            '  forever(() => { balle.move(7); balle.bounce(); });\n});\n</script>'
+                        }
+                    />
+                    <div className={styles.buttonRow}>
+                        <button
+                            className={classNames(styles.actionBtn, styles.primaryBtn)}
+                            onClick={() => this.handleConvertWeb()}
+                            disabled={this.state.webBusy}
+                        >
+                            {this.state.webBusy ?
+                                '⏳ Conversion en cours…' :
+                                '🌐 Convertir la page en blocs Scratch'}
+                        </button>
+                        <button
+                            className={classNames(styles.actionBtn, styles.templateBtn)}
+                            onClick={this.handleLoadWebPong}
+                            title="Pong complet écrit en HTML/CSS/JS, converti puis appliqué"
+                        >
+                            🏓 Exemple Pong (web)
+                        </button>
+                        <button
+                            className={classNames(styles.actionBtn, styles.templateBtn)}
+                            onClick={this.handleLoadWebClicker}
+                            title="Un bouton web avec états :hover/:active devenu sprite interactif"
+                        >
+                            🔘 Exemple Bouton
+                        </button>
+                        <button
+                            className={classNames(styles.actionBtn, styles.secondaryBtn)}
+                            onClick={() => this.setState({webCode: ''})}
+                        >
+                            Effacer
+                        </button>
+                    </div>
+                </div>
+
+                {/* Step 3: conversion journal */}
+                <div className={styles.section}>
+                    <div className={styles.sectionHeader}>
+                        <div className={styles.sectionTitle}>
+                            <span className={styles.stepNumber}>{'3'}</span>
+                            <span>{'Journal de conversion'}</span>
+                        </div>
+                    </div>
+                    <div className={styles.terminalBox}>
+                        {this.state.webLogs.join('\n')}
+                    </div>
+                </div>
+            </React.Fragment>
+        );
+    }
+
     render () {
         return (
             <ModalComponent
@@ -512,11 +702,21 @@ class AIAgentModalComponent extends React.Component {
                         >
                             {'🛰️ Mode agent (gros projets)'}
                         </button>
+                        <button
+                            className={classNames(styles.tabButton, {
+                                [styles.tabActive]: this.state.activeTab === 'web'
+                            })}
+                            onClick={() => this.setState({activeTab: 'web'})}
+                            title="L'IA code en HTML/CSS/JS : la page devient des sprites, des costumes et des blocs"
+                        >
+                            {'🌐 Mode HTML/JS → blocs'}
+                        </button>
                     </div>
 
                     {/* Tab Content */}
                     {this.state.activeTab === 'assistant' && this.renderAssistantTab()}
                     {this.state.activeTab === 'agent' && this.renderAgentTab()}
+                    {this.state.activeTab === 'web' && this.renderWebTab()}
                 </div>
             </ModalComponent>
         );

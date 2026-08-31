@@ -44,7 +44,30 @@ Console interactive intégrée. Commandes disponibles :
 - `pong` : Génère le jeu de Pong.
 - `clear-console` : Efface l'affichage du terminal.
 
-### 3. 🔍 Inspecteur de Sprites
+### 3. 🌐 Mode HTML/JS → blocs
+L'IA code une **mini-page web** (HTML + CSS + JS vanilla) et le terminal la transforme en sprites, costumes et blocs Scratch :
+- Le HTML/CSS est rendu par le navigateur dans une iframe cachée de 480×360 (la taille exacte de la scène). Chaque élément avec un `id` devient un **sprite** ; son apparence réelle (couleurs, dégradés, `border-radius`, texte, emojis, ombres…) est capturée dans un **costume SVG** fidèle.
+- Un `<button>` avec des états `:hover` / `:active` reçoit automatiquement **plusieurs costumes**, et les blocs qui les permutent selon la souris sont générés.
+- Le JS est traduit en **blocs** : `whenFlag()`, `forever()`, `if/else`, `keyPressed()`, `balle.move(7)`, `balle.touching(raquette)`, `score += 1`… Un seul `forever` qui touche plusieurs sprites est dupliqué en une boucle par sprite (exactement comme un projet Scratch construit à la main).
+- Boutons : **« 🏓 Exemple Pong (web) »** et **« 🔘 Exemple Bouton »** pour tester sans IA, et **« 📋 Copier le prompt (mode HTML/JS) »** pour demander à ChatGPT/Claude de répondre dans ce dialecte.
+
+Extrait de code reconnu :
+```html
+<div id="balle" style="position:absolute;left:229px;top:169px;width:22px;height:22px;
+     background:#FFAB19;border-radius:50%"></div>
+<script>
+whenFlag(() => {
+  balle.gotoXy(0, 0);
+  forever(() => {
+    balle.move(7);
+    balle.bounce();
+    if (balle.touching('_edge_')) score += 1;
+  });
+});
+</script>
+```
+
+### 4. 🔍 Inspecteur de Sprites
 - Liste visuelle de tous les sprites et de la scène avec coordonnées, taille, variables et retranscription complète des scripts sous forme de texte clair.
 
 ---
