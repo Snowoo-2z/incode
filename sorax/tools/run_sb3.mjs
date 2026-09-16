@@ -70,7 +70,8 @@ function main() {
     const model = SoraxRuntime.load(fs.readFileSync(args.bin ||
         path.join(path.dirname(path.dirname(sb3Path)), 'nano', 'sorax_core.bin')));
     if (Array.isArray(sortie) && sortie.length) {
-        const reference = model.tokenizer.decode(sortie, false);
+        // décodage jeton par jeton, comme le runtime et comme le script Scratch
+        const reference = sortie.map((id) => model.tokenizer.decodeToken(id)).join('');
         if (reference !== String(vm.variables['sx reponse'])) {
             console.error(`\nÉCHEC : le runtime décode ${JSON.stringify(reference)} ` +
                 `mais le projet Scratch a écrit ${JSON.stringify(String(vm.variables['sx reponse']))}`);

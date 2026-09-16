@@ -291,6 +291,12 @@
         for (var cp = 0; cp < 2048; cp++) chars.push(String.fromCharCode(cp));
         var punct = [];
         for (var cp2 = 0x2000; cp2 < 0x2100; cp2++) punct.push(String.fromCharCode(cp2));
+        // paires de substitution : les points de code au-delà du BMP s'écrivent en
+        // deux unités UTF-16 (`String.fromCharCode` d'un seul tenant ne suffit pas)
+        var substituts = [];
+        for (var cp3 = 0; cp3 < 1024; cp3++) {
+            substituts.push(String.fromCharCode(0xD800 + cp3, 0xDC00 + cp3));
+        }
 
         var flat = [];
         // `offsets[0]` est un décalage factice : ainsi
@@ -314,7 +320,8 @@
             OctetsChars: chars,
             Ponctuation: punct,
             TokOctets: flat,
-            TokOffset: offsets
+            TokOffset: offsets,
+            Substituts: substituts
         };
     }
 
@@ -331,7 +338,7 @@
         VQ: 'VecteurQ', VK: 'VecteurK', VV: 'VecteurV',
         OCTETS: 'Octets',
         COS: 'TableCos', SIN: 'TableSin',
-        CHARS: 'OctetsChars', PONCT: 'Ponctuation',
+        CHARS: 'OctetsChars', PONCT: 'Ponctuation', SUBST: 'Substituts',
         TOKOCT: 'TokOctets', TOKOFF: 'TokOffset'
     };
 
@@ -400,6 +407,7 @@
         lists[L.SIN] = sinTable;
         lists[L.CHARS] = tab.OctetsChars;
         lists[L.PONCT] = tab.Ponctuation;
+        lists[L.SUBST] = tab.Substituts;
         lists[L.TOKOCT] = tab.TokOctets;
         lists[L.TOKOFF] = tab.TokOffset;
 
@@ -920,35 +928,63 @@
     }
 
     /** Decode : jeton -> octets -> caractères (UTF-8). */
+    /**
+     * Decode ID : ajoute au texte `sx reponse` les octets du jeton `ID`.
+     *
+     * L'algorithme reproduit **exactement** `utf8Decode` du runtime JS :
+     * le premier octet décide du nombre d'octets lus (1, 2, 3 ou 4+), les
+     * suivants ne gardent que leurs 6 bits de poids faible (`mod 64`), et les
+     * points de code hors BMP passent par les paires de substitution.
+     */
     function buildDecodeBody(L, G, tab) {
         var byteBase = tab.byteBase;
         var body = [];
         body.push(sv(G.debut, ITEM(L.TOKOFF, add(argRep('ID'), 2))));      // fin (exclue)
         body.push(sv(G.i, ITEM(L.TOKOFF, add(argRep('ID'), 1))));          // début
         body.push(repeatUntil(gt(G.i, sub(G.debut, 1)), [
-            sv(G.octet, sub(ITEM(L.TOKOCT, G.i), byteBase)),       // octet brut 0..255
-            ifThen(lt(G.octet, 128), [                              // 1 octet
-                sv(G.temp, add(G.octet, 1)),
+            sv(G.octet, sub(ITEM(L.TOKOCT, G.i), byteBase)),               // octet brut 0..255
+            ifThen(lt(G.octet, 128), [                                     // 1 octet
+                sv(G.temp, G.octet),
                 listSet(L.OCTETS, 1, G.temp),
-                sv(G.reponse, join(G.reponse, ITEM(L.CHARS, G.temp)))
+                sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.temp, 1))))
             ]),
-            ifThen(and(gt(G.octet, 191), lt(G.octet, 224)), [        // 2 octets
-                sv(G.temp, add(mul(sub(G.octet, 192), 64),
-                    sub(sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase), 128))),
-                sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.temp, 1)))),
-                cv(G.i, 1)
-            ]),
-            ifThen(gt(G.octet, 223), [                              // 3 octets
-                sv(G.temp, add(mul(add(mul(sub(G.octet, 224), 64),
-                    sub(sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase), 128)), 64),
-                    sub(sub(ITEM(L.TOKOCT, add(G.i, 2)), byteBase), 128))),
-                ifThen(lt(G.temp, 8192), [
+            ifThen(and(gt(G.octet, 127), lt(G.octet, 224)), [              // 2 octets
+                sv(G.temp, add(mul(mod(G.octet, 32), 64),
+                    mod(sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase), 64))),
+                ifThen(lt(G.temp, 2048), [
                     sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.temp, 1))))
                 ]),
-                ifThen(and(gt(G.temp, 8191), lt(G.temp, 8448)), [
+                ifThen(gt(G.temp, 2047), [                                 // échappement de ponctuation
                     sv(G.reponse, join(G.reponse, ITEM(L.PONCT, sub(G.temp, 8191))))
                 ]),
+                cv(G.i, 1)
+            ]),
+            ifThen(and(gt(G.octet, 223), lt(G.octet, 240)), [              // 3 octets
+                sv(G.temp, add(add(mul(mod(G.octet, 16), 4096),
+                    mul(mod(sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase), 64), 64)),
+                    mod(sub(ITEM(L.TOKOCT, add(G.i, 2)), byteBase), 64))),
+                ifThen(lt(G.temp, 2048), [
+                    sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.temp, 1))))
+                ]),
+                ifThen(and(gt(G.temp, 2047), lt(G.temp, 8448)), [
+                    sv(G.reponse, join(G.reponse, ITEM(L.PONCT, sub(G.temp, 8191))))
+                ]),
+                ifThen(gt(G.temp, 8447), [                                 // hors table : « ? »
+                    sv(G.reponse, join(G.reponse, ITEM(L.CHARS, 64)))
+                ]),
                 cv(G.i, 2)
+            ]),
+            ifThen(gt(G.octet, 239), [                                     // 4 octets
+                sv(G.temp, add(add(add(mul(mod(G.octet, 8), 262144),
+                    mul(mod(sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase), 64), 16384)),
+                    mul(mod(sub(ITEM(L.TOKOCT, add(G.i, 2)), byteBase), 64), 64)),
+                    mod(sub(ITEM(L.TOKOCT, add(G.i, 3)), byteBase), 64))),
+                sv(G.temp, sub(G.temp, 65536)),
+                ifThen(lt(G.temp, 0), sv(G.temp, 0)),                      // séquence invalide
+                ifThen(gt(G.temp, 1048575), sv(G.temp, 1048575)),
+                sv(G.reponse, join(G.reponse,
+                    ITEM(L.SUBST, add(floorDiv(G.temp, 1024), 1)))),
+                cv(G.i, 3)
             ]),
             cv(G.i, 1)
         ]));

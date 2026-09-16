@@ -150,7 +150,9 @@ function main() {
     // vérifie donc `Decode` sur les jetons réellement produits (`JetonsSortie`),
     // puis on contrôle que les jetons forcés ont bien été les premiers.
     const generes = vm.lists.JetonsSortie.map((v) => Math.round(Number(v)));
-    const decodedRef = tokenizer.decode(generes, false);
+    // le runtime (`generate`) et le projet Scratch décodent jeton par jeton :
+    // un caractère coupé entre deux jetons n'est pas recomposé
+    const decodedRef = generes.map((id) => tokenizer.decodeToken(id)).join('');
     const reponse = String(vm.variables['sx reponse']);
     if (reponse !== decodedRef) {
         problems.push(`Decode différent :\n  Scratch : ${JSON.stringify(reponse)}\n  JS      : ${JSON.stringify(decodedRef)}`);

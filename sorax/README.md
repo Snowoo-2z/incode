@@ -56,6 +56,10 @@ Propriétés vérifiées :
 * **mêmes résultats que le runtime JS** : jetons d'entrée, logits étape par étape et texte
   décodé sont identiques (écart relatif max ~2·10⁻⁵, dû aux seuls arrondis d'affichage
   des listes Scratch → voir `tools/test_scratch_engine.mjs`) ;
+* le décodeur reproduit exactement `utf8Decode` du runtime (1 à 4 octets par caractère,
+  paires de substitution comprises) ; limite assumée : les points de code au-delà de
+  `U+07FF` hors plage de ponctuation sont écrits `?` — le français, l'ASCII et la
+  ponctuation sont, eux, restitués à l'identique ;
 * **aucune extension**, aucun bloc « hacked » : uniquement des blocs standard, donc le
   projet s'ouvre aussi bien dans Scratch que dans TurboWarp ;
 * le projet réellement livré s'exécute de bout en bout, échantillonnage compris :
@@ -79,12 +83,20 @@ pip install -r sorax/requirements.txt          # numpy (local) — torch sur Col
 # 2. extraire la grammaire réelle des blocs depuis le dépôt
 node sorax/tools/dump_grammar.mjs
 
-# 3. générer le corpus + entraîner (ou passer par Colab)
+# 3. générer le corpus et le tokenizer
 python sorax/tools/make_corpus.py --preset demo
-python sorax/tools/train.py --config nano --preset demo --out sorax/assets/checkpoints/nano-local
+python sorax/tools/build_tokenizer.py
 
-# 4. exporter le dump int8
-python sorax/tools/export.py --config nano --ckpt sorax/assets/checkpoints/nano-local
+# 4a. entraîner sur GPU (Colab T4) — le chemin normal
+python sorax/tools/train_torch.py --config nano \
+    --corpus sorax/assets/corpus --tokenizer sorax/assets/tokenizer.json \
+    --out sorax/assets/checkpoints/nano-torch --steps 4000
+
+# 4b. ou en NumPy (lent, sans GPU : sert à valider la chaîne)
+python sorax/tools/train.py --config nano --steps 300 --out sorax/assets/checkpoints/nano-local
+
+# 5. exporter le dump int8
+python sorax/tools/export.py --config nano --ckpt sorax/assets/checkpoints/nano-torch/last.npz
 
 # 5. fabriquer le projet Scratch
 node sorax/tools/build_sb3.mjs \
@@ -120,8 +132,15 @@ visible que **hors de l'interface Sorax** (le terminal de l'assistant le masque)
 demande un **mot de passe écrit en dur** (`src/lib/sorax-download.js`) avant de
 télécharger le projet. Ce n'est pas une sécurité : juste un sas pendant la bêta.
 
-Le `.sb3` est embarqué par webpack (`file-loader`, règle `\.sb3$`) et servi depuis
-`static/sorax/`.
+Le `.sb3` est embarqué par webpack (`file-loader`, règle `\.sb3$`) : il est copié dans
+`static/sorax/` à la compilation, donc le téléchargement marche même hors ligne.
+
+### Sur Colab (T4)
+
+`sorax/colab/Sorax_T4.ipynb` déroule tout le pipeline : montage de Google Drive (les
+artefacts survivent à la fermeture du navigateur), corpus, tokenizer, **entraînement
+GPU** (`tools/train_torch.py`), export int8, construction du `.sb3` et vérifications de
+parité. Le notebook se régénère avec `python sorax/colab/build_notebook.py`.
 
 ```bash
 npm install          # à défaut de réseau direct : NODE_EXTRA_CA_CERTS=… npm install
@@ -134,8 +153,9 @@ npm run build        # build de production dans build/
 ```
 sorax/
 ├── sorax/            paquet Python (tokenizer, corpus, modèles, quantification, export)
-├── tools/            scripts CLI (dump_grammar, make_corpus, train, export, build_sb3,
-│                     validate_sb3, test_scratch_engine, run_sb3, scratch-vm)
+├── tools/            scripts CLI (dump_grammar, make_corpus, train, train_torch, export,
+│                     build_sb3, validate_sb3, test_scratch_engine, run_sb3, scratch-vm)
+├── colab/            notebook T4 (Sorax_T4.ipynb) et son générateur
 ├── runtime/          moteur JS (sorax-runtime.js) + générateur de blocs (scratch-engine.js,
 │                     sb3-builder.js)
 ├── assets/           artefacts générés (grammaire, tokenizer, corpus, poids, checkpoints)

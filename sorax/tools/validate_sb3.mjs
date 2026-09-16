@@ -198,7 +198,8 @@ function checkLists(project, meta) {
         TableCos: meta.contexte * (arch.d_model / arch.n_heads) / 2,
         TableSin: meta.contexte * (arch.d_model / arch.n_heads) / 2,
         OctetsChars: 2048,
-        Ponctuation: 256
+        Ponctuation: 256,
+        Substituts: 1024
     };
     Object.keys(expect).forEach((name) => {
         const values = byName[name];
@@ -213,10 +214,12 @@ function checkLists(project, meta) {
         ok(`${name} : ${values.length} éléments`);
     });
 
+    // listes de caractères (tables du tokenizer) : le texte y est normal
+    const textLists = ['OctetsChars', 'Ponctuation', 'Substituts'];
     Object.keys(byName).forEach((name) => {
         const values = byName[name];
         const bad = values.findIndex((v) => v === '' || v === null || v === undefined ||
-            (typeof v === 'string' && Number.isNaN(Number(v)) && name !== 'OctetsChars' && name !== 'Ponctuation'));
+            (typeof v === 'string' && Number.isNaN(Number(v)) && !textLists.includes(name)));
         if (bad !== -1) {
             fail(`liste ${name} : valeur invalide à l'index ${bad} (${JSON.stringify(values[bad])})`);
         }
