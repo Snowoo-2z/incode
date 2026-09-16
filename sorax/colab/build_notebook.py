@@ -59,7 +59,7 @@ cells = [
         "    'STEPS': '4000',           # pas d'entraînement GPU",
         "    'BATCH_SIZE': '32',",
         "    'REPO': '/content/incode',",
-        "    'BRANCHE': 'develop',",
+        "    'BRANCHE': 'arena/01a0aa1f-incode',   # mets 'develop' après le merge de la PR #9",
         "    'REPO_URL': 'https://github.com/Snowoo-2z/incode.git',",
         "    'DRIVE': '/content/drive/MyDrive/sorax',",
         '}',
