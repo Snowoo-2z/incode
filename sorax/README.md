@@ -2,7 +2,7 @@
 
 > Projet **Snowoo-** · moteur **Sorax** · langage cible **ScratchScript**
 
-Sorax est un **grand modèle de langage (LLM) entraîné de zéro**, puis **compressé en données**
+Sorax est un **grand modèle de langage entraîné de zéro**, puis **compressé en données**
 pour être exécuté à l'intérieur d'un projet Scratch : pas d'API, pas de serveur, pas de
 connexion — le réseau de neurones est *dans le `.sb3`*.
 
@@ -43,39 +43,101 @@ Le palier **Scratch pur** stocke chaque poids en int8 dans des **listes Scratch*
 le *forward pass* avec de vrais blocs (multiplications matricielles, RMSNorm, RoPE, softmax,
 échantillonnage). Aucune extension n'est requise.
 
+## Le moteur Scratch (palier nano)
+
+`runtime/scratch-engine.js` écrit le réseau **en blocs Scratch** : listes de poids
+(`Poids`, `Echelles`, `Normes`), cache `CacheK`/`CacheV`, tables `TableCos`/`TableSin`,
+tables du tokenizer (`OctetsChars`, `Ponctuation`, `TokOctets`, `TokOffset`) et les
+procédures *warp* `Matvec`, `Norme`, `Ajoute`, `Copie`, `Silu`, `Attention`, `Tete`,
+`Echantillonne`, `Encode`, `Decode`, `Passe`.
+
+Propriétés vérifiées :
+
+* **mêmes résultats que le runtime JS** : jetons d'entrée, logits étape par étape et texte
+  décodé sont identiques (écart relatif max ~2·10⁻⁵, dû aux seuls arrondis d'affichage
+  des listes Scratch → voir `tools/test_scratch_engine.mjs`) ;
+* **aucune extension**, aucun bloc « hacked » : uniquement des blocs standard, donc le
+  projet s'ouvre aussi bien dans Scratch que dans TurboWarp ;
+* le projet réellement livré s'exécute de bout en bout, échantillonnage compris :
+  `node sorax/tools/run_sb3.mjs "Crée un jeu de Pong"`.
+
+### Boucle d'exécution
+
+| Bloc | Rôle |
+|---|---|
+| drapeau vert | construit les listes, armé = `sx pret` |
+| clic sur le sprite / touche espace | demande la consigne (`ask`), puis diffuse `SoraxGenere` |
+| `SoraxGenere` | `Encode` la consigne → préremplissage (`Passe %s` pour chaque jeton) → `Tete` → boucle `Echantillonne` / `Decode` / `Passe %s` |
+| `Historique` | garde les demandes précédentes |
+
 ## Démarrage rapide
 
 ```bash
-# 1. (une fois) installer l'outillage
+# 1. (une fois) installer l'outillage Python
 pip install -r sorax/requirements.txt          # numpy (local) — torch sur Colab
 
 # 2. extraire la grammaire réelle des blocs depuis le dépôt
 node sorax/tools/dump_grammar.mjs
 
-# 3. générer le corpus + l'entraîner (ou passer par les notebooks Colab)
+# 3. générer le corpus + entraîner (ou passer par Colab)
 python sorax/tools/make_corpus.py --preset demo
-python sorax/tools/train.py --config nano --preset demo --out sorax/assets/checkpoints/nano-demo
+python sorax/tools/train.py --config nano --preset demo --out sorax/assets/checkpoints/nano-local
 
-# 4. exporter + construire le projet Scratch
-python sorax/tools/export.py --config nano --ckpt sorax/assets/checkpoints/nano-demo
-python sorax/tools/build_sb3.py --config nano            # -> dist_sorax/Sorax-Nano.sb3
+# 4. exporter le dump int8
+python sorax/tools/export.py --config nano --ckpt sorax/assets/checkpoints/nano-local
+
+# 5. fabriquer le projet Scratch
+node sorax/tools/build_sb3.mjs \
+  --bin sorax/assets/export/nano/sorax_core.bin \
+  --out sorax/assets/export/nano/sorax-scratch.sb3 \
+  --context 128 --max-new 48
 ```
 
-Sur Colab (T4), tout se fait depuis les notebooks de `sorax/colab/` — voir
-[`docs/01_PIPELINE.md`](docs/01_PIPELINE.md).
+### Vérifications
+
+```bash
+# structure du .sb3 (opcodes, procédures, tailles de listes) — sans VM
+node sorax/tools/validate_sb3.mjs
+
+# parité NumPy ↔ runtime JS (tolérance 1e-3)
+python sorax/tools/check_runtime_parity.py sorax/assets/export/nano/sorax_core.bin
+
+# parité moteur Scratch ↔ runtime JS (micro-interpréteur, sans node_modules)
+node sorax/tools/test_scratch_engine.mjs --prompt "abc" --tokens 3
+
+# exécution réelle du projet livré (drapeau vert → réponse)
+node sorax/tools/run_sb3.mjs "Crée un jeu de plates-formes"
+```
+
+`tools/scratch-vm.mjs` est le micro-interpréteur Scratch partagé (listes, variables,
+opérateurs, boucles, procédures, diffusion) : il sert aux deux derniers scripts et
+permet de valider le projet **sans `node_modules`**.
+
+## Intégration à l'IDE
+
+Le bouton **« download sorax »** se trouve juste à gauche du drapeau vert. Il n'est
+visible que **hors de l'interface Sorax** (le terminal de l'assistant le masque) et
+demande un **mot de passe écrit en dur** (`src/lib/sorax-download.js`) avant de
+télécharger le projet. Ce n'est pas une sécurité : juste un sas pendant la bêta.
+
+Le `.sb3` est embarqué par webpack (`file-loader`, règle `\.sb3$`) et servi depuis
+`static/sorax/`.
+
+```bash
+npm install          # à défaut de réseau direct : NODE_EXTRA_CA_CERTS=… npm install
+npm start            # éditeur + Sorax sur http://0.0.0.0:8601
+npm run build        # build de production dans build/
+```
 
 ## Structure
 
 ```
 sorax/
 ├── sorax/            paquet Python (tokenizer, corpus, modèles, quantification, export)
-├── tools/            scripts CLI (dump_grammar, make_corpus, train, export, build_sb3…)
-├── runtime/          moteur d'inférence JavaScript (navigateur + TurboWarp)
+├── tools/            scripts CLI (dump_grammar, make_corpus, train, export, build_sb3,
+│                     validate_sb3, test_scratch_engine, run_sb3, scratch-vm)
+├── runtime/          moteur JS (sorax-runtime.js) + générateur de blocs (scratch-engine.js,
+│                     sb3-builder.js)
 ├── assets/           artefacts générés (grammaire, tokenizer, corpus, poids, checkpoints)
-├── colab/            notebooks T4 prêts à l'emploi
-├── tests/            tests unitaires + parité numpy ↔ JS
-└── docs/             documentation détaillée (FR)
+└── tests/            tests unitaires Python + parité numpy ↔ torch
 ```
-
-Dans l'IDE, le moteur est exposé par le bouton **« Download Sorax »** (à gauche du drapeau vert)
-et par le menu **Sorax**. Voir [`docs/04_GUI.md`](docs/04_GUI.md).

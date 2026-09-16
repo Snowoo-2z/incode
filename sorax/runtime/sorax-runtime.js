@@ -592,7 +592,8 @@
         var maxNew = opts.maxNewTokens || 160;
         var temperature = opts.temperature === undefined ? 0.7 : opts.temperature;
         var topK = opts.topK === undefined ? 40 : opts.topK;
-        var repeatPenalty = opts.repeatPenalty === undefined ? 0.05 : opts.repeatPenalty;
+        // même pénalité soustractive que `quantized_forward.generate` (Python)
+        var repeatPenalty = opts.repeatPenalty === undefined ? 1.05 : opts.repeatPenalty;
         var random = opts.random || Math.random;
 
         this.reset();

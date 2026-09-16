@@ -4,6 +4,7 @@ import React from 'react';
 import {defineMessages, injectIntl, intlShape} from 'react-intl';
 
 import GreenFlag from '../green-flag/green-flag.jsx';
+import SoraxDownload from '../sorax-download/sorax-download.jsx';
 import StopAll from '../stop-all/stop-all.jsx';
 import TurboMode from '../turbo-mode/turbo-mode.jsx';
 import FramerateIndicator from '../tw-framerate-indicator/framerate-indicator.jsx';
@@ -34,6 +35,7 @@ const Controls = function (props) {
         framerate,
         interpolation,
         isSmall,
+        showSoraxDownload,
         ...componentProps
     } = props;
     return (
@@ -41,6 +43,8 @@ const Controls = function (props) {
             className={classNames(styles.controlsContainer, className)}
             {...componentProps}
         >
+            {/* juste à gauche du drapeau vert, hors interface Sorax */}
+            <SoraxDownload show={showSoraxDownload} />
             <GreenFlag
                 active={active}
                 title={intl.formatMessage(messages.goTitle)}
@@ -73,13 +77,15 @@ Controls.propTypes = {
     framerate: PropTypes.number,
     interpolation: PropTypes.bool,
     isSmall: PropTypes.bool,
+    showSoraxDownload: PropTypes.bool,
     turbo: PropTypes.bool
 };
 
 Controls.defaultProps = {
     active: false,
     turbo: false,
-    isSmall: false
+    isSmall: false,
+    showSoraxDownload: true
 };
 
 export default injectIntl(Controls);

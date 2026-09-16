@@ -87,6 +87,19 @@ const base = {
             }
         },
         {
+            // Le projet Sorax (moteur de l'assistant, en blocs Scratch) est
+            // embarqué tel quel : le bouton « download sorax » le sert depuis
+            // `static/sorax/`.
+            test: /\.sb3$/,
+            loader: 'file-loader',
+            options: {
+                name: '[name].[ext]',
+                outputPath: 'static/sorax/',
+                publicPath: `${STATIC_PATH}/sorax/`,
+                esModule: false
+            }
+        },
+        {
             test: /\.css$/,
             use: [{
                 loader: 'style-loader'
