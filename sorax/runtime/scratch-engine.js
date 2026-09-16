@@ -289,13 +289,24 @@
 
         var chars = [];
         for (var cp = 0; cp < 2048; cp++) chars.push(String.fromCharCode(cp));
+        // table complète du BMP : le décodage d'une séquence de 3 octets peut
+        // tomber sur n'importe quel point de code jusqu'à U+FFFF
+        var unicodeChars = [];
+        for (var cpu = 0; cpu < 65536; cpu++) unicodeChars.push(String.fromCharCode(cpu));
         var punct = [];
         for (var cp2 = 0x2000; cp2 < 0x2100; cp2++) punct.push(String.fromCharCode(cp2));
         // paires de substitution : les points de code au-delà du BMP s'écrivent en
         // deux unités UTF-16 (`String.fromCharCode` d'un seul tenant ne suffit pas)
-        var substituts = [];
-        for (var cp3 = 0; cp3 < 1024; cp3++) {
-            substituts.push(String.fromCharCode(0xD800 + cp3, 0xDC00 + cp3));
+        // paires de substitution : `0xD800 + (cp >> 10)` peut sortir de
+        // [0, 1023] (séquences invalides), et `0xDC00 + (cp & 0x3FF)` ne se
+        // déduit pas du premier : deux tables séparées, comme le runtime.
+        var substitutsHaut = [];
+        for (var haut = -64; haut <= 2047; haut++) {
+            substitutsHaut.push(String.fromCharCode(0xD800 + haut));
+        }
+        var substitutsBas = [];
+        for (var bas = 0; bas < 1024; bas++) {
+            substitutsBas.push(String.fromCharCode(0xDC00 + bas));
         }
 
         var flat = [];
@@ -321,7 +332,9 @@
             Ponctuation: punct,
             TokOctets: flat,
             TokOffset: offsets,
-            Substituts: substituts
+            UnicodeChars: unicodeChars,
+            SubstitutsHaut: substitutsHaut,
+            SubstitutsBas: substitutsBas
         };
     }
 
@@ -338,7 +351,8 @@
         VQ: 'VecteurQ', VK: 'VecteurK', VV: 'VecteurV',
         OCTETS: 'Octets',
         COS: 'TableCos', SIN: 'TableSin',
-        CHARS: 'OctetsChars', PONCT: 'Ponctuation', SUBST: 'Substituts',
+        CHARS: 'OctetsChars', PONCT: 'Ponctuation', UNI: 'UnicodeChars',
+        SUBST_H: 'SubstitutsHaut', SUBST_B: 'SubstitutsBas',
         TOKOCT: 'TokOctets', TOKOFF: 'TokOffset'
     };
 
@@ -350,6 +364,7 @@
         longueur: 'sx longueur', meilleur: 'sx meilleur', rang: 'sx rang',
         total: 'sx total', tirage: 'sx tirage', acc: 'sx accumulateur',
         temp: 'sx temp', temp2: 'sx temp2', octet: 'sx octet',
+        octet2: 'sx octet2', octet3: 'sx octet3', octet4: 'sx octet4',
         maxLogit: 'sx maxLogit', a: 'sx a', b: 'sx b',
         cos: 'sx cos', sin: 'sx sin', debut: 'sx debut', compteur: 'sx compteur',
         drapeau: 'sx drapeau', tete: 'sx tete', cosTrace: 'sx dernierCos'
@@ -407,7 +422,9 @@
         lists[L.SIN] = sinTable;
         lists[L.CHARS] = tab.OctetsChars;
         lists[L.PONCT] = tab.Ponctuation;
-        lists[L.SUBST] = tab.Substituts;
+        lists[L.UNI] = tab.UnicodeChars;
+        lists[L.SUBST_H] = tab.SubstitutsHaut;
+        lists[L.SUBST_B] = tab.SubstitutsBas;
         lists[L.TOKOCT] = tab.TokOctets;
         lists[L.TOKOFF] = tab.TokOffset;
 
@@ -936,54 +953,70 @@
      * suivants ne gardent que leurs 6 bits de poids faible (`mod 64`), et les
      * points de code hors BMP passent par les paires de substitution.
      */
+    /**
+     * Decode ID : ajoute au texte `sx reponse` les octets du jeton `ID`.
+     *
+     * L'algorithme reproduit **exactement** `utf8Decode` du runtime JS :
+     * le premier octet décide du nombre d'octets lus (1, 2, 3 ou 4+), les
+     * suivants ne gardent que leurs 6 bits de poids faible (`mod 64`), et les
+     * points de code hors BMP passent par les paires de substitution.
+     */
+    /**
+     * Decode ID : ajoute au texte `sx reponse` les octets du jeton `ID`.
+     *
+     * L'algorithme reproduit **exactement** `utf8Decode` du runtime JS :
+     * le premier octet décide du nombre d'octets lus (1, 2, 3 ou 4+), les
+     * suivants ne gardent que leurs 6 bits de poids faible (`mod 64`), et un
+     * octet absent (fin de jeton) vaut 0 — comme `undefined & 0x3F` en
+     * JavaScript. Les points de code hors BMP passent par les paires de
+     * substitution.
+     */
     function buildDecodeBody(L, G, tab) {
         var byteBase = tab.byteBase;
+        var dernier = sub(G.debut, 1);                       // dernier indice du jeton
         var body = [];
         body.push(sv(G.debut, ITEM(L.TOKOFF, add(argRep('ID'), 2))));      // fin (exclue)
         body.push(sv(G.i, ITEM(L.TOKOFF, add(argRep('ID'), 1))));          // début
         body.push(repeatUntil(gt(G.i, sub(G.debut, 1)), [
             sv(G.octet, sub(ITEM(L.TOKOCT, G.i), byteBase)),               // octet brut 0..255
+            // lecture bornée des octets suivants : au-delà du jeton, la valeur est 0
+            sv(G.octet2, 0),
+            ifThen(lt(G.i, dernier),
+                sv(G.octet2, sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase))),
+            sv(G.octet3, 0),
+            ifThen(lt(add(G.i, 1), dernier),
+                sv(G.octet3, sub(ITEM(L.TOKOCT, add(G.i, 2)), byteBase))),
+            sv(G.octet4, 0),
+            ifThen(lt(add(G.i, 2), dernier),
+                sv(G.octet4, sub(ITEM(L.TOKOCT, add(G.i, 3)), byteBase))),
+
             ifThen(lt(G.octet, 128), [                                     // 1 octet
-                sv(G.temp, G.octet),
-                listSet(L.OCTETS, 1, G.temp),
-                sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.temp, 1))))
+                sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.octet, 1))))
             ]),
             ifThen(and(gt(G.octet, 127), lt(G.octet, 224)), [              // 2 octets
-                sv(G.temp, add(mul(mod(G.octet, 32), 64),
-                    mod(sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase), 64))),
-                ifThen(lt(G.temp, 2048), [
-                    sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.temp, 1))))
-                ]),
-                ifThen(gt(G.temp, 2047), [                                 // échappement de ponctuation
-                    sv(G.reponse, join(G.reponse, ITEM(L.PONCT, sub(G.temp, 8191))))
-                ]),
+                sv(G.temp, add(mul(mod(G.octet, 32), 64), mod(G.octet2, 64))),
+                sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.temp, 1)))),
                 cv(G.i, 1)
             ]),
             ifThen(and(gt(G.octet, 223), lt(G.octet, 240)), [              // 3 octets
                 sv(G.temp, add(add(mul(mod(G.octet, 16), 4096),
-                    mul(mod(sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase), 64), 64)),
-                    mod(sub(ITEM(L.TOKOCT, add(G.i, 2)), byteBase), 64))),
-                ifThen(lt(G.temp, 2048), [
-                    sv(G.reponse, join(G.reponse, ITEM(L.CHARS, add(G.temp, 1))))
-                ]),
-                ifThen(and(gt(G.temp, 2047), lt(G.temp, 8448)), [
+                    mul(mod(G.octet2, 64), 64)), mod(G.octet3, 64))),
+                ifThen(and(gt(G.temp, 8191), lt(G.temp, 8448)), [          // échappement de ponctuation
                     sv(G.reponse, join(G.reponse, ITEM(L.PONCT, sub(G.temp, 8191))))
                 ]),
-                ifThen(gt(G.temp, 8447), [                                 // hors table : « ? »
-                    sv(G.reponse, join(G.reponse, ITEM(L.CHARS, 64)))
+                ifThen(not(and(gt(G.temp, 8191), lt(G.temp, 8448))), [
+                    sv(G.reponse, join(G.reponse, ITEM(L.UNI, add(G.temp, 1))))
                 ]),
                 cv(G.i, 2)
             ]),
-            ifThen(gt(G.octet, 239), [                                     // 4 octets
+            ifThen(gt(G.octet, 239), [                                     // 4 octets et plus
                 sv(G.temp, add(add(add(mul(mod(G.octet, 8), 262144),
-                    mul(mod(sub(ITEM(L.TOKOCT, add(G.i, 1)), byteBase), 64), 16384)),
-                    mul(mod(sub(ITEM(L.TOKOCT, add(G.i, 2)), byteBase), 64), 64)),
-                    mod(sub(ITEM(L.TOKOCT, add(G.i, 3)), byteBase), 64))),
+                    mul(mod(G.octet2, 64), 16384)), mul(mod(G.octet3, 64), 64)),
+                    mod(G.octet4, 64))),
                 sv(G.temp, sub(G.temp, 65536)),
-                ifThen(lt(G.temp, 0), sv(G.temp, 0)),                      // séquence invalide
-                ifThen(gt(G.temp, 1048575), sv(G.temp, 1048575)),
-                sv(G.reponse, join(G.reponse,
-                    ITEM(L.SUBST, add(floorDiv(G.temp, 1024), 1)))),
+                sv(G.reponse, join(G.reponse, join(
+                    ITEM(L.SUBST_H, add(floorDiv(G.temp, 1024), 65)),
+                    ITEM(L.SUBST_B, add(mod(G.temp, 1024), 1))))),
                 cv(G.i, 3)
             ]),
             cv(G.i, 1)

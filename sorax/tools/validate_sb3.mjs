@@ -199,7 +199,9 @@ function checkLists(project, meta) {
         TableSin: meta.contexte * (arch.d_model / arch.n_heads) / 2,
         OctetsChars: 2048,
         Ponctuation: 256,
-        Substituts: 1024
+        UnicodeChars: 65536,
+        SubstitutsHaut: 2112,
+        SubstitutsBas: 1024
     };
     Object.keys(expect).forEach((name) => {
         const values = byName[name];
@@ -215,7 +217,8 @@ function checkLists(project, meta) {
     });
 
     // listes de caractères (tables du tokenizer) : le texte y est normal
-    const textLists = ['OctetsChars', 'Ponctuation', 'Substituts'];
+    const textLists = ['OctetsChars', 'Ponctuation', 'UnicodeChars',
+        'SubstitutsHaut', 'SubstitutsBas'];
     Object.keys(byName).forEach((name) => {
         const values = byName[name];
         const bad = values.findIndex((v) => v === '' || v === null || v === undefined ||
