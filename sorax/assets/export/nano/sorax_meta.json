@@ -1,0 +1,41 @@
+{
+ "nom": "Sorax",
+ "auteur": "Snowoo-",
+ "palier": "nano",
+ "fichier": "sorax_core.bin",
+ "octets": 161524,
+ "mo": 0.154,
+ "parametres": 147904,
+ "contexte": 384,
+ "vocabulaire": 384,
+ "sha256": "9cd6d502d5c4ac4fdf3ed8601d4e1c2ae9aafc66094e541406dc09ad5ec142a0",
+ "quantification": "int8 par canal (poids) / int8 dynamique (activations)",
+ "tensors": 33,
+ "checkpoint": "/home/user/incode/sorax/assets/checkpoints/nano-local/last.npz",
+ "duree_export_s": 28.25,
+ "evaluation": {
+  "perte_quantifiee": 0.4632,
+  "exemples": [
+   {
+    "tache": "code",
+    "demande": "Cree un jeu de Pong avec deux raquettes et un score",
+    "reponse": "\n  repet 0\nvar temps = 15\nsprite Cilf_: 0 -140:\n  whenflagclicked\n  show\n  setsize 150 180\n  setsize 80\n  forever:\n    if (touching Vaisseau):\n      set score 140\n\nsprite Chmme 0 0:\n  whenflagclicked\n  show\n  setsize 60\n  forever:\n    neat -2\n    change x -1\n    if (< (ypos) -"
+   },
+   {
+    "tache": "code",
+    "demande": "Un jeu de collecte ou on ramasse des pieces avant la fin du chrono",
+    "reponse": "un st 0\nsprite Vaisseau 0 0:\n  whenflagclicked\n  show\n  setsize 100\n  forever:\n    move -100.15 (mousex)) (mousey)\n\nsprite Cile 0 150:\n  whenflagclicked\n  repeat) 0\n  show\n  repeatuntil (change y Jousex)\n\nsprite Soble 0 180:\n  whenflagclicked\n  hide\n  gotoxy 0 180\n  gotoxy"
+   },
+   {
+    "tache": "doc",
+    "demande": "A quoi sert le bloc bounce ?",
+    "reponse": "un leRie dstnesut chenc:r upgdcoui `."
+   },
+   {
+    "tache": "chat",
+    "demande": "salut",
+    "reponse": "t cor)."
+   }
+  ]
+ }
+}
