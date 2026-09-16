@@ -330,6 +330,46 @@ ${JSON_ALTERNATIVE}
 };
 
 /**
+ * Prompt système du **tchat Sorax** : l'assistant écrit directement les blocs.
+ *
+ * Plus court que `generateAIPrompt` (pas d'objectif imposé, pas de JSON de
+ * secours) : c'est une conversation, l'assistant répond en français et place
+ * le code ScratchScript dans des blocs \`\`\`scratchscript.
+ *
+ * @param {object} vm Scratch VM (pour l'état du projet)
+ * @returns {string} prompt système
+ */
+const CHAT_INTRO = 'Tu es Sorax, l\'assistant intégré à ScratchScript. Tu écris toi-même les ' +
+    'blocs Scratch : tu réponds en FRANÇAIS, court et concret, et tu places le code ' +
+    'ScratchScript dans un bloc \`\`\`scratchscript.';
+
+const generateChatSystemPrompt = vm => `${CHAT_INTRO}
+
+Tu vois l'état actuel du projet Scratch :
+${formatProjectSummary(vm)}${projectDocumentationBlock()}
+
+Quand l'utilisateur décrit ce qu'il veut, tu écris le ScratchScript correspondant : il est
+appliqué au projet d'un clic, donc il doit être VALIDE et complet (sprites, variables,
+listes, scripts avec leurs blocs indentés).
+
+${ANSWER_FORMAT}
+
+${DSL_LANGUAGE_RULES}
+
+${COMMAND_REFERENCE_HEADER}
+${listDslCommands()}
+
+${OPCODES_CHEATSHEET}
+${COSTUME_DOC}
+
+${COMPLETE_EXAMPLE}
+
+${TARGETED_EDITS_DOC}
+
+${IMPORTANT_RULES}
+`;
+
+/**
  * Generates the AGENT prompt: a tiny project overview and the list of tools the
  * AI may call. No sprite code is sent — the AI asks for the sprites it needs
  * with `/read`, which is what makes big projects usable.
@@ -588,6 +628,7 @@ prêt à être collé dans l'onglet « 🌐 Mode HTML/JS » du Terminal IA, qui 
 
 export {
     generateAIPrompt,
+    generateChatSystemPrompt,
     generateContinuationPrompt,
     generateFollowUpPrompt,
     generateAgentPrompt,

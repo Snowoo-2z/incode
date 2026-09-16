@@ -37,6 +37,8 @@ const base = {
         disableHostCheck: true,
         compress: true,
         port: process.env.PORT || 8601,
+        // `npm start` ouvre l'éditeur (et non le lecteur) sur « / ».
+        index: 'editor.html',
         // allows ROUTING_STYLE=wildcard to work properly
         historyApiFallback: {
             rewrites: [

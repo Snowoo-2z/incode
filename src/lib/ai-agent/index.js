@@ -5,7 +5,7 @@
 
 import {readTarget, readAllTargets, formatProjectSummary} from './sprite-reader.js';
 import {interpretAndExecute} from './code-interpreter.js';
-import {generateAIPrompt, generateContinuationPrompt, generateFollowUpPrompt, generateAgentPrompt, generateAgentFollowUp, generateWebModePrompt} from './prompt-generator.js';
+import {generateAIPrompt, generateChatSystemPrompt, generateContinuationPrompt, generateFollowUpPrompt, generateAgentPrompt, generateAgentFollowUp, generateWebModePrompt} from './prompt-generator.js';
 import {runAgentRequests, stripAgentRequests, formatProjectOverview} from './agent-protocol.js';
 import {transpileWebProject} from './html-to-scratch.js';
 import {PONG_GAME_TEMPLATE, CLICKER_GAME_TEMPLATE, WEB_PONG_TEMPLATE, WEB_CLICKER_TEMPLATE} from './templates.js';
@@ -63,6 +63,14 @@ class AIAgentManager {
      */
     generatePrompt (userGoal) {
         return generateAIPrompt(this.getVM(), userGoal);
+    }
+
+    /**
+     * Prompt système du tchat Sorax : l'assistant écrit directement les blocs.
+     * @returns {string} prompt système, projet Scratch inclus
+     */
+    getChatSystemPrompt () {
+        return generateChatSystemPrompt(this.getVM());
     }
 
     /**
