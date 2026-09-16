@@ -137,10 +137,14 @@ Le `.sb3` est embarqué par webpack (`file-loader`, règle `\.sb3$`) : il est co
 
 ### Sur Colab (T4)
 
-`sorax/colab/Sorax_T4.ipynb` déroule tout le pipeline : montage de Google Drive (les
-artefacts survivent à la fermeture du navigateur), corpus, tokenizer, **entraînement
-GPU** (`tools/train_torch.py`), export int8, construction du `.sb3` et vérifications de
-parité. Le notebook se régénère avec `python sorax/colab/build_notebook.py`.
+* `sorax/colab/one_cell.py` — **tout en une seule cellule** (à coller dans Colab) :
+  Drive, corpus, tokenizer, entraînement GPU, export int8, `.sb3`, vérifications de parité,
+  réponses de Sorax et archive finale ;
+* `sorax/colab/Sorax_T4.ipynb` — la même chaîne découpée en cellules commentées, générée
+  par `python sorax/colab/build_notebook.py`.
+
+Dans les deux cas, les artefacts restent **sur Drive** : une coupure de Colab ne coûte
+rien, l'entraînement reprend depuis `last.npz`.
 
 ```bash
 npm install          # à défaut de réseau direct : NODE_EXTRA_CA_CERTS=… npm install
