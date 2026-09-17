@@ -1,0 +1,13 @@
+{
+  "format": "sxp-1",
+  "word_total": 3668,
+  "line_total": 2782,
+  "expected_lines": 59872,
+  "expected_chars": 1991116,
+  "items": 166,
+  "alpha": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`{|}~",
+  "dataset_sha256": "32d9e22fb9f1efe49d0447f76ba89e3db84cb319b1db13a1488bccb91881e9f4",
+  "formula_2char": "idx = (d1*68)+(d2)-(68)",
+  "formula_line": "idx = (d2*68)+(d3)-(68)+(WORD_TOTAL)",
+  "note": "SXP-2: alphabet 68 chars sans paires de casse ( Scratch compare sans la casse )"
+}
