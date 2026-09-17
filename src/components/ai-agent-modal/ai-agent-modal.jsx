@@ -9,13 +9,14 @@ import AIAgent, {
     WEB_CLICKER_TEMPLATE
 } from '../../lib/ai-agent/index.js';
 import ProjectDocumentation from '../../lib/project-documentation.js';
+import SoraxChat from '../sorax-chat/sorax-chat.jsx';
 import styles from './ai-agent-modal.css';
 
 class AIAgentModalComponent extends React.Component {
     constructor (props) {
         super(props);
         this.state = {
-            activeTab: 'assistant', // 'assistant' | 'agent'
+            activeTab: 'chat', // 'chat' | 'assistant' | 'agent' | 'web'
             userGoal: 'Créer un jeu de Pong à 2 joueurs : Paddle1 (touches W/S), Paddle2 (flèches Haut/Bas), une balle qui rebondit et compte les scores.',
             aiCodeInput: '',
             executionLogs: [
@@ -678,14 +679,23 @@ class AIAgentModalComponent extends React.Component {
                     <div className={styles.headerText}>
                         <span className={styles.headerTitle}>{'Votre assistant de code Scratch'}</span>
                         <span className={styles.headerSubtitle}>
-                            {'Générez un prompt, exécutez la réponse de l\'IA — ou laissez l\'agent explorer ' +
-                                `le projet (${this.state.targets.length} cible(s)).`}
+                            {'Discute avec Sorax : il écrit les blocs dans ton projet. ' +
+                                `(projet courant : ${this.state.targets.length} cible(s))`}
                         </span>
                     </div>
                 </div>
                 <div className={styles.body}>
                     {/* Navigation Tabs */}
                     <div className={styles.tabs}>
+                        <button
+                            className={classNames(styles.tabButton, {
+                                [styles.tabActive]: this.state.activeTab === 'chat'
+                            })}
+                            onClick={() => this.setState({activeTab: 'chat'})}
+                            title="Discuter avec Sorax : il écrit les blocs lui-même"
+                        >
+                            {'💬 Tchat Sorax'}
+                        </button>
                         <button
                             className={classNames(styles.tabButton, {
                                 [styles.tabActive]: this.state.activeTab === 'assistant'
@@ -714,6 +724,9 @@ class AIAgentModalComponent extends React.Component {
                     </div>
 
                     {/* Tab Content */}
+                    {this.state.activeTab === 'chat' && (
+                        <SoraxChat vm={this.props.vm} />
+                    )}
                     {this.state.activeTab === 'assistant' && this.renderAssistantTab()}
                     {this.state.activeTab === 'agent' && this.renderAgentTab()}
                     {this.state.activeTab === 'web' && this.renderWebTab()}

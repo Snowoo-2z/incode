@@ -1,0 +1,3011 @@
+{
+ "generatedAt": "2026-09-16T12:13:01.839Z",
+ "source": "src/lib/ai-agent/{block-schema,dsl-parser}.js",
+ "opcodeCount": 134,
+ "hatOpcodes": [
+  "event_whenflagclicked",
+  "event_whenthisspriteclicked",
+  "event_whenstageclicked",
+  "event_whenkeypressed",
+  "event_whenbroadcastreceived",
+  "event_whenbackdropswitchesto",
+  "event_whengreaterthan",
+  "control_start_as_clone"
+ ],
+ "aliases": {
+  "if": {
+   "opcode": "control_if",
+   "params": [
+    {
+     "name": "CONDITION",
+     "kind": "boolean",
+     "required": true
+    }
+   ]
+  },
+  "forever": {
+   "opcode": "control_forever",
+   "params": []
+  },
+  "repeat": {
+   "opcode": "control_repeat",
+   "params": [
+    {
+     "name": "TIMES",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "wait": {
+   "opcode": "control_wait",
+   "params": [
+    {
+     "name": "DURATION",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "waituntil": {
+   "opcode": "control_wait_until",
+   "params": [
+    {
+     "name": "CONDITION",
+     "kind": "boolean",
+     "required": true
+    }
+   ]
+  },
+  "repeatuntil": {
+   "opcode": "control_repeat_until",
+   "params": [
+    {
+     "name": "CONDITION",
+     "kind": "boolean",
+     "required": true
+    }
+   ]
+  },
+  "stop": {
+   "opcode": "control_stop",
+   "params": [
+    {
+     "name": "STOP_OPTION",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "clone": {
+   "opcode": "control_create_clone_of",
+   "params": [
+    {
+     "name": "CLONE_OPTION",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "createclone": {
+   "opcode": "control_create_clone_of",
+   "params": [
+    {
+     "name": "CLONE_OPTION",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "deleteclone": {
+   "opcode": "control_delete_this_clone",
+   "params": []
+  },
+  "whenclone": {
+   "opcode": "control_start_as_clone",
+   "params": []
+  },
+  "startasclone": {
+   "opcode": "control_start_as_clone",
+   "params": []
+  },
+  "whenflag": {
+   "opcode": "event_whenflagclicked",
+   "params": []
+  },
+  "whenflagclicked": {
+   "opcode": "event_whenflagclicked",
+   "params": []
+  },
+  "whenclicked": {
+   "opcode": "event_whenthisspriteclicked",
+   "params": []
+  },
+  "whenkey": {
+   "opcode": "event_whenkeypressed",
+   "params": [
+    {
+     "name": "KEY_OPTION",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "broadcast": {
+   "opcode": "event_broadcast",
+   "params": [
+    {
+     "name": "BROADCAST_INPUT",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "broadcastwait": {
+   "opcode": "event_broadcastandwait",
+   "params": [
+    {
+     "name": "BROADCAST_INPUT",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "whenreceive": {
+   "opcode": "event_whenbroadcastreceived",
+   "params": [
+    {
+     "name": "BROADCAST_OPTION",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "whenbroadcast": {
+   "opcode": "event_whenbroadcastreceived",
+   "params": [
+    {
+     "name": "BROADCAST_OPTION",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "move": {
+   "opcode": "motion_movesteps",
+   "params": [
+    {
+     "name": "STEPS",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "turnright": {
+   "opcode": "motion_turnright",
+   "params": [
+    {
+     "name": "DEGREES",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "turnleft": {
+   "opcode": "motion_turnleft",
+   "params": [
+    {
+     "name": "DEGREES",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "goto": {
+   "opcode": "motion_goto",
+   "params": [
+    {
+     "name": "TO",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "gotoxy": {
+   "opcode": "motion_gotoxy",
+   "params": [
+    {
+     "name": "X",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "Y",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "glideto": {
+   "opcode": "motion_glideto",
+   "params": [
+    {
+     "name": "SECS",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "TO",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "glidexy": {
+   "opcode": "motion_glidesecstoxy",
+   "params": [
+    {
+     "name": "SECS",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "X",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "Y",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "point": {
+   "opcode": "motion_pointindirection",
+   "params": [
+    {
+     "name": "DIRECTION",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "pointtowards": {
+   "opcode": "motion_pointtowards",
+   "params": [
+    {
+     "name": "TOWARDS",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "changex": {
+   "opcode": "motion_changexby",
+   "params": [
+    {
+     "name": "DX",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "setx": {
+   "opcode": "motion_setx",
+   "params": [
+    {
+     "name": "X",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "changey": {
+   "opcode": "motion_changeyby",
+   "params": [
+    {
+     "name": "DY",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "sety": {
+   "opcode": "motion_sety",
+   "params": [
+    {
+     "name": "Y",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "bounce": {
+   "opcode": "motion_ifonedgebounce",
+   "params": []
+  },
+  "rotationstyle": {
+   "opcode": "motion_setrotationstyle",
+   "params": [
+    {
+     "name": "STYLE",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "xpos": {
+   "opcode": "motion_xposition",
+   "params": []
+  },
+  "ypos": {
+   "opcode": "motion_yposition",
+   "params": []
+  },
+  "direction": {
+   "opcode": "motion_direction",
+   "params": []
+  },
+  "say": {
+   "opcode": "looks_say",
+   "params": [
+    {
+     "name": "MESSAGE",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "sayfor": {
+   "opcode": "looks_sayforsecs",
+   "params": [
+    {
+     "name": "MESSAGE",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "SECS",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "think": {
+   "opcode": "looks_think",
+   "params": [
+    {
+     "name": "MESSAGE",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "thinkfor": {
+   "opcode": "looks_thinkforsecs",
+   "params": [
+    {
+     "name": "MESSAGE",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "SECS",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "costume": {
+   "opcode": "looks_switchcostumeto",
+   "params": [
+    {
+     "name": "COSTUME",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "nextcostume": {
+   "opcode": "looks_nextcostume",
+   "params": []
+  },
+  "backdrop": {
+   "opcode": "looks_switchbackdropto",
+   "params": [
+    {
+     "name": "BACKDROP",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "nextbackdrop": {
+   "opcode": "looks_nextbackdrop",
+   "params": []
+  },
+  "changesize": {
+   "opcode": "looks_changesizeby",
+   "params": [
+    {
+     "name": "CHANGE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "setsize": {
+   "opcode": "looks_setsizeto",
+   "params": [
+    {
+     "name": "SIZE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "changegraphiceffect": {
+   "opcode": "looks_changeeffectby",
+   "params": [
+    {
+     "name": "EFFECT",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "CHANGE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "setgraphiceffect": {
+   "opcode": "looks_seteffectto",
+   "params": [
+    {
+     "name": "EFFECT",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "show": {
+   "opcode": "looks_show",
+   "params": []
+  },
+  "hide": {
+   "opcode": "looks_hide",
+   "params": []
+  },
+  "size": {
+   "opcode": "looks_size",
+   "params": []
+  },
+  "play": {
+   "opcode": "sound_play",
+   "params": [
+    {
+     "name": "SOUND_MENU",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "playuntildone": {
+   "opcode": "sound_playuntildone",
+   "params": [
+    {
+     "name": "SOUND_MENU",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "stopsounds": {
+   "opcode": "sound_stopallsounds",
+   "params": []
+  },
+  "changesoundeffect": {
+   "opcode": "sound_changeeffectby",
+   "params": [
+    {
+     "name": "EFFECT",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "setsoundeffect": {
+   "opcode": "sound_seteffectto",
+   "params": [
+    {
+     "name": "EFFECT",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "changevolume": {
+   "opcode": "sound_changevolumeby",
+   "params": [
+    {
+     "name": "VOLUME",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "setvolume": {
+   "opcode": "sound_setvolumeto",
+   "params": [
+    {
+     "name": "VOLUME",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "volume": {
+   "opcode": "sound_volume",
+   "params": []
+  },
+  "touching": {
+   "opcode": "sensing_touchingobject",
+   "params": [
+    {
+     "name": "TOUCHINGOBJECTMENU",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "touchingcolor": {
+   "opcode": "sensing_touchingcolor",
+   "params": [
+    {
+     "name": "COLOR",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "ask": {
+   "opcode": "sensing_askandwait",
+   "params": [
+    {
+     "name": "QUESTION",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "answer": {
+   "opcode": "sensing_answer",
+   "params": []
+  },
+  "keypressed": {
+   "opcode": "sensing_keypressed",
+   "params": [
+    {
+     "name": "KEY_OPTION",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "mousedown": {
+   "opcode": "sensing_mousedown",
+   "params": []
+  },
+  "mousex": {
+   "opcode": "sensing_mousex",
+   "params": []
+  },
+  "mousey": {
+   "opcode": "sensing_mousey",
+   "params": []
+  },
+  "timer": {
+   "opcode": "sensing_timer",
+   "params": []
+  },
+  "resettimer": {
+   "opcode": "sensing_resettimer",
+   "params": []
+  },
+  "loudness": {
+   "opcode": "sensing_loudness",
+   "params": []
+  },
+  "username": {
+   "opcode": "sensing_username",
+   "params": []
+  },
+  "distanceto": {
+   "opcode": "sensing_distanceto",
+   "params": [
+    {
+     "name": "DISTANCETOMENU",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "of": {
+   "opcode": "sensing_of",
+   "params": [
+    {
+     "name": "PROPERTY",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "OBJECT",
+     "kind": "menu",
+     "required": true
+    }
+   ]
+  },
+  "+": {
+   "opcode": "operator_add",
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "-": {
+   "opcode": "operator_subtract",
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "*": {
+   "opcode": "operator_multiply",
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "/": {
+   "opcode": "operator_divide",
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "%": {
+   "opcode": "operator_mod",
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "mod": {
+   "opcode": "operator_mod",
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  ">": {
+   "opcode": "operator_gt",
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "<": {
+   "opcode": "operator_lt",
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "=": {
+   "opcode": "operator_equals",
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "==": {
+   "opcode": "operator_equals",
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "and": {
+   "opcode": "operator_and",
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "boolean",
+     "required": true
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "boolean",
+     "required": true
+    }
+   ]
+  },
+  "or": {
+   "opcode": "operator_or",
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "boolean",
+     "required": true
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "boolean",
+     "required": true
+    }
+   ]
+  },
+  "not": {
+   "opcode": "operator_not",
+   "params": [
+    {
+     "name": "OPERAND",
+     "kind": "boolean",
+     "required": true
+    }
+   ]
+  },
+  "join": {
+   "opcode": "operator_join",
+   "params": [
+    {
+     "name": "STRING1",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "STRING2",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "letterof": {
+   "opcode": "operator_letter_of",
+   "params": [
+    {
+     "name": "LETTER",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "STRING",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "length": {
+   "opcode": "operator_length",
+   "params": [
+    {
+     "name": "STRING",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "contains": {
+   "opcode": "operator_contains",
+   "params": [
+    {
+     "name": "STRING1",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "STRING2",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "round": {
+   "opcode": "operator_round",
+   "params": [
+    {
+     "name": "NUM",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "random": {
+   "opcode": "operator_random",
+   "params": [
+    {
+     "name": "FROM",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "TO",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "mathop": {
+   "opcode": "operator_mathop",
+   "params": [
+    {
+     "name": "OPERATOR",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "NUM",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "set": {
+   "opcode": "data_setvariableto",
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "change": {
+   "opcode": "data_changevariableby",
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "setvar": {
+   "opcode": "data_setvariableto",
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "text",
+     "required": true
+    }
+   ]
+  },
+  "changevar": {
+   "opcode": "data_changevariableby",
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "showvar": {
+   "opcode": "data_showvariable",
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "hidevar": {
+   "opcode": "data_hidevariable",
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "var": {
+   "opcode": "data_variable",
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "additem": {
+   "opcode": "data_addtolist",
+   "params": [
+    {
+     "name": "ITEM",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "deleteitem": {
+   "opcode": "data_deleteoflist",
+   "params": [
+    {
+     "name": "INDEX",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "deleteall": {
+   "opcode": "data_deletealloflist",
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "insertitem": {
+   "opcode": "data_insertatlist",
+   "params": [
+    {
+     "name": "ITEM",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "INDEX",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "replaceitem": {
+   "opcode": "data_replaceitemoflist",
+   "params": [
+    {
+     "name": "INDEX",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "ITEM",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "itemof": {
+   "opcode": "data_itemoflist",
+   "params": [
+    {
+     "name": "INDEX",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "itemnum": {
+   "opcode": "data_itemnumoflist",
+   "params": [
+    {
+     "name": "ITEM",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "listlength": {
+   "opcode": "data_lengthoflist",
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "listcontains": {
+   "opcode": "data_listcontainsitem",
+   "params": [
+    {
+     "name": "ITEM",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "showlist": {
+   "opcode": "data_showlist",
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "hidelist": {
+   "opcode": "data_hidelist",
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "required": true
+    }
+   ]
+  },
+  "penclear": {
+   "opcode": "pen_clear",
+   "params": []
+  },
+  "stamp": {
+   "opcode": "pen_stamp",
+   "params": []
+  },
+  "pendown": {
+   "opcode": "pen_penDown",
+   "params": []
+  },
+  "penup": {
+   "opcode": "pen_penUp",
+   "params": []
+  },
+  "pencolor": {
+   "opcode": "pen_setPenColorToColor",
+   "params": [
+    {
+     "name": "COLOR",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "changepencolorparam": {
+   "opcode": "pen_changePenColorParamBy",
+   "params": [
+    {
+     "name": "COLOR_PARAM",
+     "kind": "menu",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "setpencolorparam": {
+   "opcode": "pen_setPenColorParamTo",
+   "params": [
+    {
+     "name": "COLOR_PARAM",
+     "kind": "menu",
+     "required": true
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "changepensize": {
+   "opcode": "pen_changePenSizeBy",
+   "params": [
+    {
+     "name": "SIZE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  },
+  "setpensize": {
+   "opcode": "pen_setPenSizeTo",
+   "params": [
+    {
+     "name": "SIZE",
+     "kind": "number",
+     "required": true
+    }
+   ]
+  }
+ },
+ "opcodes": {
+  "event_whenflagclicked": {
+   "category": "event",
+   "suffix": "whenflagclicked",
+   "hat": true,
+   "params": [],
+   "branches": []
+  },
+  "event_whenthisspriteclicked": {
+   "category": "event",
+   "suffix": "whenthisspriteclicked",
+   "hat": true,
+   "params": [],
+   "branches": []
+  },
+  "event_whenstageclicked": {
+   "category": "event",
+   "suffix": "whenstageclicked",
+   "hat": true,
+   "params": [],
+   "branches": []
+  },
+  "event_whenkeypressed": {
+   "category": "event",
+   "suffix": "whenkeypressed",
+   "hat": true,
+   "params": [
+    {
+     "name": "KEY_OPTION",
+     "kind": "field",
+     "default": "space"
+    }
+   ],
+   "branches": []
+  },
+  "event_whenbroadcastreceived": {
+   "category": "event",
+   "suffix": "whenbroadcastreceived",
+   "hat": true,
+   "params": [
+    {
+     "name": "BROADCAST_OPTION",
+     "kind": "field",
+     "default": "message1"
+    }
+   ],
+   "branches": []
+  },
+  "event_whengreaterthan": {
+   "category": "event",
+   "suffix": "whengreaterthan",
+   "hat": true,
+   "params": [
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "WHENGREATERTHANMENU",
+     "kind": "field",
+     "default": "LOUDNESS"
+    }
+   ],
+   "branches": []
+  },
+  "event_whenbackdropswitchesto": {
+   "category": "event",
+   "suffix": "whenbackdropswitchesto",
+   "hat": true,
+   "params": [
+    {
+     "name": "BACKDROP",
+     "kind": "field",
+     "default": "backdrop1"
+    }
+   ],
+   "branches": []
+  },
+  "event_broadcast": {
+   "category": "event",
+   "suffix": "broadcast",
+   "hat": false,
+   "params": [
+    {
+     "name": "BROADCAST_INPUT",
+     "kind": "menu",
+     "menu": "event_broadcast_menu",
+     "default": "message1"
+    }
+   ],
+   "branches": []
+  },
+  "event_broadcastandwait": {
+   "category": "event",
+   "suffix": "broadcastandwait",
+   "hat": false,
+   "params": [
+    {
+     "name": "BROADCAST_INPUT",
+     "kind": "menu",
+     "menu": "event_broadcast_menu",
+     "default": "message1"
+    }
+   ],
+   "branches": []
+  },
+  "motion_movesteps": {
+   "category": "motion",
+   "suffix": "movesteps",
+   "hat": false,
+   "params": [
+    {
+     "name": "STEPS",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_turnright": {
+   "category": "motion",
+   "suffix": "turnright",
+   "hat": false,
+   "params": [
+    {
+     "name": "DEGREES",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_turnleft": {
+   "category": "motion",
+   "suffix": "turnleft",
+   "hat": false,
+   "params": [
+    {
+     "name": "DEGREES",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_goto": {
+   "category": "motion",
+   "suffix": "goto",
+   "hat": false,
+   "params": [
+    {
+     "name": "TO",
+     "kind": "menu",
+     "menu": "motion_goto_menu",
+     "default": "_random_"
+    }
+   ],
+   "branches": []
+  },
+  "motion_gotoxy": {
+   "category": "motion",
+   "suffix": "gotoxy",
+   "hat": false,
+   "params": [
+    {
+     "name": "X",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "Y",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_glideto": {
+   "category": "motion",
+   "suffix": "glideto",
+   "hat": false,
+   "params": [
+    {
+     "name": "SECS",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "TO",
+     "kind": "menu",
+     "menu": "motion_glideto_menu",
+     "default": "_random_"
+    }
+   ],
+   "branches": []
+  },
+  "motion_glidesecstoxy": {
+   "category": "motion",
+   "suffix": "glidesecstoxy",
+   "hat": false,
+   "params": [
+    {
+     "name": "SECS",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "X",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "Y",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_pointindirection": {
+   "category": "motion",
+   "suffix": "pointindirection",
+   "hat": false,
+   "params": [
+    {
+     "name": "DIRECTION",
+     "kind": "number",
+     "shadow": "math_angle"
+    }
+   ],
+   "branches": []
+  },
+  "motion_pointtowards": {
+   "category": "motion",
+   "suffix": "pointtowards",
+   "hat": false,
+   "params": [
+    {
+     "name": "TOWARDS",
+     "kind": "menu",
+     "menu": "motion_pointtowards_menu",
+     "default": "_mouse_"
+    }
+   ],
+   "branches": []
+  },
+  "motion_changexby": {
+   "category": "motion",
+   "suffix": "changexby",
+   "hat": false,
+   "params": [
+    {
+     "name": "DX",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_setx": {
+   "category": "motion",
+   "suffix": "setx",
+   "hat": false,
+   "params": [
+    {
+     "name": "X",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_changeyby": {
+   "category": "motion",
+   "suffix": "changeyby",
+   "hat": false,
+   "params": [
+    {
+     "name": "DY",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_sety": {
+   "category": "motion",
+   "suffix": "sety",
+   "hat": false,
+   "params": [
+    {
+     "name": "Y",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "motion_ifonedgebounce": {
+   "category": "motion",
+   "suffix": "ifonedgebounce",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "motion_setrotationstyle": {
+   "category": "motion",
+   "suffix": "setrotationstyle",
+   "hat": false,
+   "params": [
+    {
+     "name": "STYLE",
+     "kind": "field",
+     "default": "left-right"
+    }
+   ],
+   "branches": []
+  },
+  "motion_xposition": {
+   "category": "motion",
+   "suffix": "xposition",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "motion_yposition": {
+   "category": "motion",
+   "suffix": "yposition",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "motion_direction": {
+   "category": "motion",
+   "suffix": "direction",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "motion_align_scene": {
+   "category": "motion",
+   "suffix": "align_scene",
+   "hat": false,
+   "params": [
+    {
+     "name": "ALIGNMENT",
+     "kind": "field",
+     "default": "bottom-left"
+    }
+   ],
+   "branches": []
+  },
+  "looks_say": {
+   "category": "looks",
+   "suffix": "say",
+   "hat": false,
+   "params": [
+    {
+     "name": "MESSAGE",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "looks_sayforsecs": {
+   "category": "looks",
+   "suffix": "sayforsecs",
+   "hat": false,
+   "params": [
+    {
+     "name": "MESSAGE",
+     "kind": "text"
+    },
+    {
+     "name": "SECS",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_think": {
+   "category": "looks",
+   "suffix": "think",
+   "hat": false,
+   "params": [
+    {
+     "name": "MESSAGE",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "looks_thinkforsecs": {
+   "category": "looks",
+   "suffix": "thinkforsecs",
+   "hat": false,
+   "params": [
+    {
+     "name": "MESSAGE",
+     "kind": "text"
+    },
+    {
+     "name": "SECS",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_switchcostumeto": {
+   "category": "looks",
+   "suffix": "switchcostumeto",
+   "hat": false,
+   "params": [
+    {
+     "name": "COSTUME",
+     "kind": "menu",
+     "menu": "looks_costume",
+     "default": ""
+    }
+   ],
+   "branches": []
+  },
+  "looks_nextcostume": {
+   "category": "looks",
+   "suffix": "nextcostume",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "looks_switchbackdropto": {
+   "category": "looks",
+   "suffix": "switchbackdropto",
+   "hat": false,
+   "params": [
+    {
+     "name": "BACKDROP",
+     "kind": "menu",
+     "menu": "looks_backdrops",
+     "default": ""
+    }
+   ],
+   "branches": []
+  },
+  "looks_nextbackdrop": {
+   "category": "looks",
+   "suffix": "nextbackdrop",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "looks_changesizeby": {
+   "category": "looks",
+   "suffix": "changesizeby",
+   "hat": false,
+   "params": [
+    {
+     "name": "CHANGE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_setsizeto": {
+   "category": "looks",
+   "suffix": "setsizeto",
+   "hat": false,
+   "params": [
+    {
+     "name": "SIZE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_changeeffectby": {
+   "category": "looks",
+   "suffix": "changeeffectby",
+   "hat": false,
+   "params": [
+    {
+     "name": "EFFECT",
+     "kind": "field",
+     "default": "COLOR"
+    },
+    {
+     "name": "CHANGE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_seteffectto": {
+   "category": "looks",
+   "suffix": "seteffectto",
+   "hat": false,
+   "params": [
+    {
+     "name": "EFFECT",
+     "kind": "field",
+     "default": "COLOR"
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_cleargraphiceffects": {
+   "category": "looks",
+   "suffix": "cleargraphiceffects",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "looks_show": {
+   "category": "looks",
+   "suffix": "show",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "looks_hide": {
+   "category": "looks",
+   "suffix": "hide",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "looks_gotofrontback": {
+   "category": "looks",
+   "suffix": "gotofrontback",
+   "hat": false,
+   "params": [
+    {
+     "name": "FRONT_BACK",
+     "kind": "field",
+     "default": "front"
+    }
+   ],
+   "branches": []
+  },
+  "looks_goforwardbackwardlayers": {
+   "category": "looks",
+   "suffix": "goforwardbackwardlayers",
+   "hat": false,
+   "params": [
+    {
+     "name": "FORWARD_BACKWARD",
+     "kind": "field",
+     "default": "forward"
+    },
+    {
+     "name": "NUM",
+     "kind": "number",
+     "shadow": "math_whole_number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_costumenumbername": {
+   "category": "looks",
+   "suffix": "costumenumbername",
+   "hat": false,
+   "params": [
+    {
+     "name": "NUMBER_NAME",
+     "kind": "field",
+     "default": "number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_backdropnumbername": {
+   "category": "looks",
+   "suffix": "backdropnumbername",
+   "hat": false,
+   "params": [
+    {
+     "name": "NUMBER_NAME",
+     "kind": "field",
+     "default": "number"
+    }
+   ],
+   "branches": []
+  },
+  "looks_size": {
+   "category": "looks",
+   "suffix": "size",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sound_play": {
+   "category": "sound",
+   "suffix": "play",
+   "hat": false,
+   "params": [
+    {
+     "name": "SOUND_MENU",
+     "kind": "menu",
+     "menu": "sound_sounds_menu",
+     "default": ""
+    }
+   ],
+   "branches": []
+  },
+  "sound_playuntildone": {
+   "category": "sound",
+   "suffix": "playuntildone",
+   "hat": false,
+   "params": [
+    {
+     "name": "SOUND_MENU",
+     "kind": "menu",
+     "menu": "sound_sounds_menu",
+     "default": ""
+    }
+   ],
+   "branches": []
+  },
+  "sound_stopallsounds": {
+   "category": "sound",
+   "suffix": "stopallsounds",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sound_changeeffectby": {
+   "category": "sound",
+   "suffix": "changeeffectby",
+   "hat": false,
+   "params": [
+    {
+     "name": "EFFECT",
+     "kind": "field",
+     "default": "PITCH"
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "sound_seteffectto": {
+   "category": "sound",
+   "suffix": "seteffectto",
+   "hat": false,
+   "params": [
+    {
+     "name": "EFFECT",
+     "kind": "field",
+     "default": "PITCH"
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "sound_cleareffects": {
+   "category": "sound",
+   "suffix": "cleareffects",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sound_changevolumeby": {
+   "category": "sound",
+   "suffix": "changevolumeby",
+   "hat": false,
+   "params": [
+    {
+     "name": "VOLUME",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "sound_setvolumeto": {
+   "category": "sound",
+   "suffix": "setvolumeto",
+   "hat": false,
+   "params": [
+    {
+     "name": "VOLUME",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "sound_volume": {
+   "category": "sound",
+   "suffix": "volume",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "control_wait": {
+   "category": "control",
+   "suffix": "wait",
+   "hat": false,
+   "params": [
+    {
+     "name": "DURATION",
+     "kind": "number",
+     "shadow": "math_positive_number"
+    }
+   ],
+   "branches": []
+  },
+  "control_repeat": {
+   "category": "control",
+   "suffix": "repeat",
+   "hat": false,
+   "params": [
+    {
+     "name": "TIMES",
+     "kind": "number",
+     "shadow": "math_whole_number"
+    }
+   ],
+   "branches": [
+    "SUBSTACK"
+   ]
+  },
+  "control_forever": {
+   "category": "control",
+   "suffix": "forever",
+   "hat": false,
+   "params": [],
+   "branches": [
+    "SUBSTACK"
+   ]
+  },
+  "control_if": {
+   "category": "control",
+   "suffix": "if",
+   "hat": false,
+   "params": [
+    {
+     "name": "CONDITION",
+     "kind": "boolean"
+    }
+   ],
+   "branches": [
+    "SUBSTACK"
+   ]
+  },
+  "control_if_else": {
+   "category": "control",
+   "suffix": "if_else",
+   "hat": false,
+   "params": [
+    {
+     "name": "CONDITION",
+     "kind": "boolean"
+    }
+   ],
+   "branches": [
+    "SUBSTACK",
+    "SUBSTACK2"
+   ]
+  },
+  "control_wait_until": {
+   "category": "control",
+   "suffix": "wait_until",
+   "hat": false,
+   "params": [
+    {
+     "name": "CONDITION",
+     "kind": "boolean"
+    }
+   ],
+   "branches": []
+  },
+  "control_repeat_until": {
+   "category": "control",
+   "suffix": "repeat_until",
+   "hat": false,
+   "params": [
+    {
+     "name": "CONDITION",
+     "kind": "boolean"
+    }
+   ],
+   "branches": [
+    "SUBSTACK"
+   ]
+  },
+  "control_stop": {
+   "category": "control",
+   "suffix": "stop",
+   "hat": false,
+   "params": [
+    {
+     "name": "STOP_OPTION",
+     "kind": "field",
+     "default": "all"
+    }
+   ],
+   "branches": []
+  },
+  "control_start_as_clone": {
+   "category": "control",
+   "suffix": "start_as_clone",
+   "hat": true,
+   "params": [],
+   "branches": []
+  },
+  "control_create_clone_of": {
+   "category": "control",
+   "suffix": "create_clone_of",
+   "hat": false,
+   "params": [
+    {
+     "name": "CLONE_OPTION",
+     "kind": "menu",
+     "menu": "control_create_clone_of_menu",
+     "default": "_myself_"
+    }
+   ],
+   "branches": []
+  },
+  "control_delete_this_clone": {
+   "category": "control",
+   "suffix": "delete_this_clone",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_touchingobject": {
+   "category": "sensing",
+   "suffix": "touchingobject",
+   "hat": false,
+   "params": [
+    {
+     "name": "TOUCHINGOBJECTMENU",
+     "kind": "menu",
+     "menu": "sensing_touchingobjectmenu",
+     "default": "_edge_"
+    }
+   ],
+   "branches": []
+  },
+  "sensing_touchingcolor": {
+   "category": "sensing",
+   "suffix": "touchingcolor",
+   "hat": false,
+   "params": [
+    {
+     "name": "COLOR",
+     "kind": "number",
+     "shadow": "colour_picker"
+    }
+   ],
+   "branches": []
+  },
+  "sensing_coloristouchingcolor": {
+   "category": "sensing",
+   "suffix": "coloristouchingcolor",
+   "hat": false,
+   "params": [
+    {
+     "name": "COLOR",
+     "kind": "number",
+     "shadow": "colour_picker"
+    },
+    {
+     "name": "COLOR2",
+     "kind": "number",
+     "shadow": "colour_picker"
+    }
+   ],
+   "branches": []
+  },
+  "sensing_distanceto": {
+   "category": "sensing",
+   "suffix": "distanceto",
+   "hat": false,
+   "params": [
+    {
+     "name": "DISTANCETOMENU",
+     "kind": "menu",
+     "menu": "sensing_distancetomenu",
+     "default": "_mouse_"
+    }
+   ],
+   "branches": []
+  },
+  "sensing_askandwait": {
+   "category": "sensing",
+   "suffix": "askandwait",
+   "hat": false,
+   "params": [
+    {
+     "name": "QUESTION",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "sensing_answer": {
+   "category": "sensing",
+   "suffix": "answer",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_keypressed": {
+   "category": "sensing",
+   "suffix": "keypressed",
+   "hat": false,
+   "params": [
+    {
+     "name": "KEY_OPTION",
+     "kind": "menu",
+     "menu": "sensing_keyoptions",
+     "default": "space"
+    }
+   ],
+   "branches": []
+  },
+  "sensing_mousedown": {
+   "category": "sensing",
+   "suffix": "mousedown",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_mousex": {
+   "category": "sensing",
+   "suffix": "mousex",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_mousey": {
+   "category": "sensing",
+   "suffix": "mousey",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_timer": {
+   "category": "sensing",
+   "suffix": "timer",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_resettimer": {
+   "category": "sensing",
+   "suffix": "resettimer",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_of": {
+   "category": "sensing",
+   "suffix": "of",
+   "hat": false,
+   "params": [
+    {
+     "name": "PROPERTY",
+     "kind": "field",
+     "default": "x position"
+    },
+    {
+     "name": "OBJECT",
+     "kind": "menu",
+     "menu": "sensing_of_object_menu",
+     "default": "_stage_"
+    }
+   ],
+   "branches": []
+  },
+  "sensing_current": {
+   "category": "sensing",
+   "suffix": "current",
+   "hat": false,
+   "params": [
+    {
+     "name": "CURRENTMENU",
+     "kind": "field",
+     "default": "YEAR"
+    }
+   ],
+   "branches": []
+  },
+  "sensing_dayssince2000": {
+   "category": "sensing",
+   "suffix": "dayssince2000",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_username": {
+   "category": "sensing",
+   "suffix": "username",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "sensing_loudness": {
+   "category": "sensing",
+   "suffix": "loudness",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "operator_add": {
+   "category": "operator",
+   "suffix": "add",
+   "hat": false,
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "operator_subtract": {
+   "category": "operator",
+   "suffix": "subtract",
+   "hat": false,
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "operator_multiply": {
+   "category": "operator",
+   "suffix": "multiply",
+   "hat": false,
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "operator_divide": {
+   "category": "operator",
+   "suffix": "divide",
+   "hat": false,
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "operator_random": {
+   "category": "operator",
+   "suffix": "random",
+   "hat": false,
+   "params": [
+    {
+     "name": "FROM",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "TO",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "operator_gt": {
+   "category": "operator",
+   "suffix": "gt",
+   "hat": false,
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "text"
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "operator_lt": {
+   "category": "operator",
+   "suffix": "lt",
+   "hat": false,
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "text"
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "operator_equals": {
+   "category": "operator",
+   "suffix": "equals",
+   "hat": false,
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "text"
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "operator_and": {
+   "category": "operator",
+   "suffix": "and",
+   "hat": false,
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "boolean"
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "boolean"
+    }
+   ],
+   "branches": []
+  },
+  "operator_or": {
+   "category": "operator",
+   "suffix": "or",
+   "hat": false,
+   "params": [
+    {
+     "name": "OPERAND1",
+     "kind": "boolean"
+    },
+    {
+     "name": "OPERAND2",
+     "kind": "boolean"
+    }
+   ],
+   "branches": []
+  },
+  "operator_not": {
+   "category": "operator",
+   "suffix": "not",
+   "hat": false,
+   "params": [
+    {
+     "name": "OPERAND",
+     "kind": "boolean"
+    }
+   ],
+   "branches": []
+  },
+  "operator_join": {
+   "category": "operator",
+   "suffix": "join",
+   "hat": false,
+   "params": [
+    {
+     "name": "STRING1",
+     "kind": "text"
+    },
+    {
+     "name": "STRING2",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "operator_letter_of": {
+   "category": "operator",
+   "suffix": "letter_of",
+   "hat": false,
+   "params": [
+    {
+     "name": "LETTER",
+     "kind": "number",
+     "shadow": "math_whole_number"
+    },
+    {
+     "name": "STRING",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "operator_length": {
+   "category": "operator",
+   "suffix": "length",
+   "hat": false,
+   "params": [
+    {
+     "name": "STRING",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "operator_contains": {
+   "category": "operator",
+   "suffix": "contains",
+   "hat": false,
+   "params": [
+    {
+     "name": "STRING1",
+     "kind": "text"
+    },
+    {
+     "name": "STRING2",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "operator_mod": {
+   "category": "operator",
+   "suffix": "mod",
+   "hat": false,
+   "params": [
+    {
+     "name": "NUM1",
+     "kind": "number",
+     "shadow": "math_number"
+    },
+    {
+     "name": "NUM2",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "operator_round": {
+   "category": "operator",
+   "suffix": "round",
+   "hat": false,
+   "params": [
+    {
+     "name": "NUM",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "operator_mathop": {
+   "category": "operator",
+   "suffix": "mathop",
+   "hat": false,
+   "params": [
+    {
+     "name": "OPERATOR",
+     "kind": "field",
+     "default": "abs"
+    },
+    {
+     "name": "NUM",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "data_variable": {
+   "category": "data",
+   "suffix": "variable",
+   "hat": false,
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "default": "ma variable"
+    }
+   ],
+   "branches": []
+  },
+  "data_setvariableto": {
+   "category": "data",
+   "suffix": "setvariableto",
+   "hat": false,
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "default": "ma variable"
+    },
+    {
+     "name": "VALUE",
+     "kind": "text"
+    }
+   ],
+   "branches": []
+  },
+  "data_changevariableby": {
+   "category": "data",
+   "suffix": "changevariableby",
+   "hat": false,
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "default": "ma variable"
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "data_showvariable": {
+   "category": "data",
+   "suffix": "showvariable",
+   "hat": false,
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "default": "ma variable"
+    }
+   ],
+   "branches": []
+  },
+  "data_hidevariable": {
+   "category": "data",
+   "suffix": "hidevariable",
+   "hat": false,
+   "params": [
+    {
+     "name": "VARIABLE",
+     "kind": "field",
+     "default": "ma variable"
+    }
+   ],
+   "branches": []
+  },
+  "data_listcontents": {
+   "category": "data",
+   "suffix": "listcontents",
+   "hat": false,
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_addtolist": {
+   "category": "data",
+   "suffix": "addtolist",
+   "hat": false,
+   "params": [
+    {
+     "name": "ITEM",
+     "kind": "text"
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_deleteoflist": {
+   "category": "data",
+   "suffix": "deleteoflist",
+   "hat": false,
+   "params": [
+    {
+     "name": "INDEX",
+     "kind": "number",
+     "shadow": "math_integer"
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_deletealloflist": {
+   "category": "data",
+   "suffix": "deletealloflist",
+   "hat": false,
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_insertatlist": {
+   "category": "data",
+   "suffix": "insertatlist",
+   "hat": false,
+   "params": [
+    {
+     "name": "ITEM",
+     "kind": "text"
+    },
+    {
+     "name": "INDEX",
+     "kind": "number",
+     "shadow": "math_integer"
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_replaceitemoflist": {
+   "category": "data",
+   "suffix": "replaceitemoflist",
+   "hat": false,
+   "params": [
+    {
+     "name": "INDEX",
+     "kind": "number",
+     "shadow": "math_integer"
+    },
+    {
+     "name": "ITEM",
+     "kind": "text"
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_itemoflist": {
+   "category": "data",
+   "suffix": "itemoflist",
+   "hat": false,
+   "params": [
+    {
+     "name": "INDEX",
+     "kind": "number",
+     "shadow": "math_integer"
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_itemnumoflist": {
+   "category": "data",
+   "suffix": "itemnumoflist",
+   "hat": false,
+   "params": [
+    {
+     "name": "ITEM",
+     "kind": "text"
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_lengthoflist": {
+   "category": "data",
+   "suffix": "lengthoflist",
+   "hat": false,
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_listcontainsitem": {
+   "category": "data",
+   "suffix": "listcontainsitem",
+   "hat": false,
+   "params": [
+    {
+     "name": "ITEM",
+     "kind": "text"
+    },
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_showlist": {
+   "category": "data",
+   "suffix": "showlist",
+   "hat": false,
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "data_hidelist": {
+   "category": "data",
+   "suffix": "hidelist",
+   "hat": false,
+   "params": [
+    {
+     "name": "LIST",
+     "kind": "field",
+     "default": "ma liste"
+    }
+   ],
+   "branches": []
+  },
+  "pen_clear": {
+   "category": "pen",
+   "suffix": "clear",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "pen_stamp": {
+   "category": "pen",
+   "suffix": "stamp",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "pen_penDown": {
+   "category": "pen",
+   "suffix": "penDown",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "pen_penUp": {
+   "category": "pen",
+   "suffix": "penUp",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "pen_setPenColorToColor": {
+   "category": "pen",
+   "suffix": "setPenColorToColor",
+   "hat": false,
+   "params": [
+    {
+     "name": "COLOR",
+     "kind": "number",
+     "shadow": "colour_picker"
+    }
+   ],
+   "branches": []
+  },
+  "pen_changePenColorParamBy": {
+   "category": "pen",
+   "suffix": "changePenColorParamBy",
+   "hat": false,
+   "params": [
+    {
+     "name": "COLOR_PARAM",
+     "kind": "menu",
+     "menu": "pen_menu_colorParam",
+     "default": "color"
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "pen_setPenColorParamTo": {
+   "category": "pen",
+   "suffix": "setPenColorParamTo",
+   "hat": false,
+   "params": [
+    {
+     "name": "COLOR_PARAM",
+     "kind": "menu",
+     "menu": "pen_menu_colorParam",
+     "default": "color"
+    },
+    {
+     "name": "VALUE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "pen_changePenSizeBy": {
+   "category": "pen",
+   "suffix": "changePenSizeBy",
+   "hat": false,
+   "params": [
+    {
+     "name": "SIZE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "pen_setPenSizeTo": {
+   "category": "pen",
+   "suffix": "setPenSizeTo",
+   "hat": false,
+   "params": [
+    {
+     "name": "SIZE",
+     "kind": "number",
+     "shadow": "math_number"
+    }
+   ],
+   "branches": []
+  },
+  "procedures_definition": {
+   "category": "procedures",
+   "suffix": "definition",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "procedures_prototype": {
+   "category": "procedures",
+   "suffix": "prototype",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "procedures_call": {
+   "category": "procedures",
+   "suffix": "call",
+   "hat": false,
+   "params": [],
+   "branches": []
+  },
+  "argument_reporter_string_number": {
+   "category": "argument",
+   "suffix": "reporter_string_number",
+   "hat": false,
+   "params": [
+    {
+     "name": "VALUE",
+     "kind": "field",
+     "default": ""
+    }
+   ],
+   "branches": []
+  },
+  "argument_reporter_boolean": {
+   "category": "argument",
+   "suffix": "reporter_boolean",
+   "hat": false,
+   "params": [
+    {
+     "name": "VALUE",
+     "kind": "field",
+     "default": ""
+    }
+   ],
+   "branches": []
+  }
+ }
+}

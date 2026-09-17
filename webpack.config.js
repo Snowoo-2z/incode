@@ -37,6 +37,8 @@ const base = {
         disableHostCheck: true,
         compress: true,
         port: process.env.PORT || 8601,
+        // `npm start` ouvre l'éditeur (et non le lecteur) sur « / ».
+        index: 'editor.html',
         // allows ROUTING_STYLE=wildcard to work properly
         historyApiFallback: {
             rewrites: [
@@ -84,6 +86,19 @@ const base = {
                         messagesDir: './translations/messages/'
                     }]],
                 presets: ['@babel/preset-env', '@babel/preset-react']
+            }
+        },
+        {
+            // Le projet Sorax (moteur de l'assistant, en blocs Scratch) est
+            // embarqué tel quel : le bouton « download sorax » le sert depuis
+            // `static/sorax/`.
+            test: /\.sb3$/,
+            loader: 'file-loader',
+            options: {
+                name: '[name].[ext]',
+                outputPath: 'static/sorax/',
+                publicPath: `${STATIC_PATH}/sorax/`,
+                esModule: false
             }
         },
         {

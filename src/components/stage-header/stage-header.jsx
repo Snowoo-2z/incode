@@ -145,7 +145,10 @@ const StageHeaderComponent = function (props) {
                     className={styles.stageMenuWrapper}
                     style={{width: stageDimensions.width}}
                 >
-                    <Controls vm={vm} />
+                    <Controls
+                        vm={vm}
+                        showSoraxDownload={!props.aiAgentModalVisible}
+                    />
                     <div
                         className={styles.fullscreenButtonsRow}
                         key="fullscreen" // addons require the HTML element to be not be re-used by in-editor buttons
@@ -201,6 +204,7 @@ const StageHeaderComponent = function (props) {
                     <Controls
                         vm={vm}
                         isSmall={stageSizeMode === STAGE_SIZE_MODES.small}
+                        showSoraxDownload={!props.aiAgentModalVisible}
                     />
                     <div
                         className={styles.stageSizeRow}
@@ -232,7 +236,9 @@ const StageHeaderComponent = function (props) {
 
 const mapStateToProps = state => ({
     // This is the button's mode, as opposed to the actual current state
-    stageSizeMode: state.scratchGui.stageSize.stageSize
+    stageSizeMode: state.scratchGui.stageSize.stageSize,
+    // le bouton « download sorax » disparaît quand l'interface Sorax est ouverte
+    aiAgentModalVisible: state.scratchGui.modals.aiAgentModal
 });
 
 StageHeaderComponent.propTypes = {
@@ -252,6 +258,7 @@ StageHeaderComponent.propTypes = {
     onSetStageFull: PropTypes.func.isRequired,
     onOpenSettings: PropTypes.func.isRequired,
     isEmbedded: PropTypes.bool.isRequired,
+    aiAgentModalVisible: PropTypes.bool,
     stageSize: PropTypes.oneOf(Object.keys(STAGE_DISPLAY_SIZES)),
     stageSizeMode: PropTypes.oneOf(Object.keys(STAGE_SIZE_MODES)),
     vm: PropTypes.instanceOf(VM).isRequired

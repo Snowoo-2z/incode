@@ -1,0 +1,24 @@
+{
+ "config": {
+  "name": "nano",
+  "vocab_size": 384,
+  "d_model": 64,
+  "n_layers": 3,
+  "n_heads": 4,
+  "d_ff": 192,
+  "max_seq_len": 384,
+  "rope_theta": 10000.0,
+  "rms_eps": 1e-05,
+  "activation": "silu",
+  "tie_embeddings": true,
+  "scratch_runnable": true,
+  "target": "Scratch / TurboWarp (palier par défaut)"
+ },
+ "data": {
+  "exemples": 3339,
+  "jetons": 811373,
+  "jetons_reponse": 626798,
+  "tronques": 12,
+  "ignores": 335
+ }
+}

@@ -1,0 +1,21 @@
+{
+ "total": 4000,
+ "by_task": {
+  "code": 3277,
+  "doc": 565,
+  "chat": 46,
+  "edit": 33,
+  "fix": 43,
+  "explain": 36
+ },
+ "moyenne_prompt": 76.0,
+ "moyenne_reponse": 460.1,
+ "max_reponse": 900,
+ "splits": {
+  "train": 3674,
+  "val": 32,
+  "test": 33
+ },
+ "preset": "demo",
+ "seed": 1337
+}

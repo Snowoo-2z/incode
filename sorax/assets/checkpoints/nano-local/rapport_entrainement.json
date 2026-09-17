@@ -1,0 +1,59 @@
+{
+ "config": {
+  "name": "nano",
+  "vocab_size": 384,
+  "d_model": 64,
+  "n_layers": 3,
+  "n_heads": 4,
+  "d_ff": 192,
+  "max_seq_len": 384,
+  "rope_theta": 10000.0,
+  "rms_eps": 1e-05,
+  "activation": "silu",
+  "tie_embeddings": true,
+  "scratch_runnable": true,
+  "target": "Scratch / TurboWarp (palier par défaut)"
+ },
+ "train": {
+  "steps": 300,
+  "batch_size": 8,
+  "lr": 0.003,
+  "min_lr_ratio": 0.1,
+  "warmup_steps": 100,
+  "weight_decay": 0.01,
+  "grad_clip": 1.0,
+  "beta1": 0.9,
+  "beta2": 0.95,
+  "eps": 1e-08,
+  "eval_every": 100,
+  "eval_batches": 8,
+  "log_every": 20,
+  "seed": 0,
+  "resume": null
+ },
+ "steps": 300,
+ "history": [
+  {
+   "step": 100,
+   "train_loss": 2.0015741858771787,
+   "lr": 0.003,
+   "val_loss": 3.4340006841110053
+  },
+  {
+   "step": 200,
+   "train_loss": 0.4282186990390136,
+   "lr": 0.001671204878370958,
+   "val_loss": 2.949458357951049
+  },
+  {
+   "step": 300,
+   "train_loss": 0.1992958478194901,
+   "lr": 0.00030016654614975827,
+   "val_loss": 3.0357125740366184
+  }
+ ],
+ "best_val_loss": 2.949458357951049,
+ "final_train_loss": 0.1992958478194901,
+ "duree_min": 11.52,
+ "parametres": 147904
+}
