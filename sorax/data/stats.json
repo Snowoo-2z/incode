@@ -1,0 +1,12 @@
+{
+  "raw_bytes": 2050988,
+  "payload_bytes": 264074,
+  "dict_bytes": 188792,
+  "n_items": 166,
+  "word_total": 3668,
+  "line_total": 2782,
+  "expected_lines": 59872,
+  "expected_chars": 1991116,
+  "dataset_sha256": "32d9e22fb9f1efe49d0447f76ba89e3db84cb319b1db13a1488bccb91881e9f4",
+  "json_bytes_estimate": 454914
+}
